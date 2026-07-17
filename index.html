@@ -5,23 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DIG - Diabetes Intelligence Guide</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             background-color: #020617;
             color: #f8fafc;
             font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         }
+        .tab-content { display: none; }
+        .tab-content.active { display: flex; flex-direction: column; flex-grow: 1; }
     </style>
 </head>
-<body class="flex flex-col min-h-screen p-4 max-w-md mx-auto justify-between">
+<body class="flex flex-col min-h-screen p-4 max-w-md mx-auto">
 
-    <div class="w-full flex-grow flex flex-col justify-between">
-        <div class="flex justify-between items-center border-b border-slate-800 pb-3">
-            <h1 class="text-2xl font-black text-emerald-400 tracking-wider">D.I.G.</h1>
-            <span id="last-sync" class="text-xs text-slate-500 font-mono">In attesa di xDrip+...</span>
-        </div>
+    <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+        <h1 class="text-2xl font-black text-emerald-400 tracking-wider">D.I.G.</h1>
+        <span id="last-sync" class="text-xs text-slate-500 font-mono">In attesa...</span>
+    </div>
 
-        <div class="my-auto text-center py-6">
+    <div id="tab-home" class="tab-content active justify-between">
+        <div class="text-center py-4">
             <div class="text-slate-500 text-xs uppercase tracking-widest font-bold mb-1">Glicemia Attuale</div>
             <div class="flex justify-center items-baseline gap-2">
                 <span id="bg-value" class="text-8xl font-black tracking-tighter text-slate-100">--</span>
@@ -32,38 +35,63 @@
             </div>
         </div>
 
-        <div class="bg-slate-900/50 border border-slate-800/80 rounded-xl p-4 mb-4">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3">Andamento Recente</h3>
-            <div id="history-list" class="flex justify-between items-end h-20 px-2 font-mono text-xs">
-                </div>
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 my-4 flex-grow flex flex-col justify-center min-h-[200px]">
+            <canvas id="bgChart"></canvas>
         </div>
+    </div>
 
-        <div class="bg-slate-900/50 border border-slate-800/80 rounded-xl p-4 flex flex-col h-64 justify-between">
+    <div id="tab-chat" class="tab-content justify-between h-[60vh]">
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-full justify-between">
             <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-1 flex items-center gap-1">
                 <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> DIG Assistant
             </h3>
-            
             <div id="chat-messages" class="flex-grow overflow-y-auto space-y-2 mb-3 text-sm flex flex-col pr-1">
                 <div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">
-                    Ciao! Sono DIG. Leggo i tuoi dati reali da xDrip+. Come posso aiutarti oggi?
+                    Ciao! Sono DIG. Leggo i tuoi dati reali da xDrip+. Chiedimi pure consiglio!
                 </div>
             </div>
-
             <div class="flex gap-2">
                 <input id="chat-input" type="text" placeholder="Chiedi a DIG..." class="flex-grow bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-emerald-500 text-slate-200">
-                <button onclick="sendMessage()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-4 py-2 rounded-lg text-sm transition-all">Invia</button>
+                <button onclick="sendMessage()" class="bg-emerald-500 text-slate-950 font-bold px-4 py-2 rounded-lg text-sm">Invia</button>
             </div>
         </div>
     </div>
 
+    <div id="tab-info" class="tab-content">
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h3 class="text-sm font-bold text-slate-300 uppercase tracking-wider">Stato Sistema</h3>
+            <p class="text-xs text-slate-400">Sorgente dati: <span class="text-emerald-400 font-mono">xDrip+ Local Link</span></p>
+            <p class="text-xs text-slate-400">Frequenza aggiornamento: <span class="text-slate-300 font-mono">Ogni 60 secondi</span></p>
+            <div class="border-t border-slate-800 pt-3">
+                <span class="text-xs text-slate-500">DIG v2.0 - Diabetes Intelligence Guide</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="flex justify-around border-t border-slate-800 pt-3 mt-auto bg-slate-950/80 p-2 rounded-xl">
+        <button onclick="switchTab('home')" class="nav-btn text-emerald-400 font-bold text-sm">Home</button>
+        <button onclick="switchTab('chat')" class="nav-btn text-slate-500 font-bold text-sm">Chat Assistant</button>
+        <button onclick="switchTab('info')" class="nav-btn text-slate-500 font-bold text-sm">Info</button>
+    </div>
+
     <script>
         let bgHistory = [];
+        let chartInstance = null;
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('text-emerald-400'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.add('text-slate-500'));
+            
+            document.getElementById('tab-' + tabName).classList.add('active');
+            event.target.classList.remove('text-slate-500');
+            event.target.classList.add('text-emerald-400');
+        }
 
         async function fetchCareLinkData() {
             document.getElementById('last-sync').innerText = "Sincronizzazione...";
             try {
-                // Legge i dati reali trasmessi da xDrip+ sul telefono
-                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=12');
+                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=24');
                 const data = await response.json();
                 
                 if (data && data.length > 0) {
@@ -74,11 +102,7 @@
                         if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
                         if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
                         
-                        return {
-                            time: timeStr,
-                            value: item.sgv,
-                            trend: trendWord
-                        };
+                        return { time: timeStr, value: item.sgv, trend: trendWord };
                     }).reverse();
 
                     localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
@@ -90,7 +114,7 @@
 
                     updateUI();
                     let oraAttuale = new Date();
-                    document.getElementById('last-sync').innerText = `Sincronizzato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
+                    document.getElementById('last-sync').innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
                 }
             } catch (err) {
                 document.getElementById('last-sync').innerText = "In attesa di xDrip+...";
@@ -103,27 +127,46 @@
             const current = bgHistory[bgHistory.length - 1];
             document.getElementById('bg-value').innerText = current.value;
             
-            // Imposta freccia trend
             let arrow = "→";
             if (current.trend === "UP") arrow = "↑";
             if (current.trend === "DOWN") arrow = "↓";
             document.getElementById('bg-trend').innerText = arrow;
 
-            // Disegna storico semplificato
-            const historyList = document.getElementById('history-list');
-            historyList.innerHTML = '';
-            
-            const lastSix = bgHistory.slice(-6);
-            lastSix.forEach(item => {
-                historyList.innerHTML += `
-                    <div class="flex flex-col items-center gap-1">
-                        <span class="text-[10px] text-slate-500">${item.time}</span>
-                        <div class="w-8 bg-slate-800 rounded flex items-center justify-center py-1 text-slate-300 font-bold border border-slate-700/50">
-                            ${item.value}
-                        </div>
-                    </div>
-                `;
-            });
+            // Aggiorna o crea il Grafico a Linee
+            const ctx = document.getElementById('bgChart').getContext('2d');
+            const labels = bgHistory.map(item => item.time);
+            const values = bgHistory.map(item => item.value);
+
+            if (chartInstance) {
+                chartInstance.data.labels = labels;
+                chartInstance.data.datasets[0].data = values;
+                chartInstance.update();
+            } else {
+                chartInstance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Glicemia',
+                            data: values,
+                            borderColor: '#10b981',
+                            backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                            borderWidth: 3,
+                            tension: 0.3,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: { legend: { display: false } },
+                        scales: {
+                            y: { grid: { color: '#1e293b' }, ticks: { color: '#94a3b8' } },
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8' } }
+                        }
+                    }
+                });
+            }
         }
 
         function triggerAlert(message) {
@@ -142,30 +185,18 @@
             if(!userText) return;
 
             const chatContainer = document.getElementById('chat-messages');
-            chatContainer.innerHTML += `
-                <div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto border border-emerald-400 font-semibold">
-                    ${userText}
-                </div>
-            `;
-
+            chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${userText}</div>`;
             input.value = '';
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
-            // Risposte simulate temporanee
             setTimeout(() => {
                 let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
-                let reply = `Ho ricevuto il messaggio! La tua glicemia attuale rilevata da xDrip+ è di ${currentBg} mg/dL.`;
-                
-                chatContainer.innerHTML += `
-                    <div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800">
-                        ${reply}
-                    </div>
-                `;
+                let reply = `Dato letto da xDrip+: ${currentBg} mg/dL. Come posso aiutarti a gestire questo valore?`;
+                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800">${reply}</div>`;
                 chatContainer.scrollTop = chatContainer.scrollHeight;
             }, 1000);
         }
 
-        // Avvio automatico e aggiornamento ogni minuto
         fetchCareLinkData();
         setInterval(fetchCareLinkData, 60000);
     </script>
