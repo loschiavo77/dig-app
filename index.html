@@ -89,9 +89,11 @@
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-full justify-between">
             <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-1 flex items-center justify-between">
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> DIG Assistant Intel</span>
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-3">
+                    <button id="toggle-audio-btn" onclick="toggleAudioOutput()" class="text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-950 text-slate-400 font-bold transition-colors">
+                        Voce: OFF
+                    </button>
                     <button onclick="clearChatMemory()" class="text-[9px] text-red-400 font-mono underline opacity-50 hover:opacity-100">Svuota</button>
-                    <span id="voice-status" class="text-[9px] text-slate-500 normal-case font-mono">Vocale pronto</span>
                 </div>
             </h3>
             <div id="chat-messages" class="flex-grow overflow-y-auto space-y-2 mb-3 text-sm flex flex-col pr-1">
@@ -119,6 +121,9 @@
         let chartInstance = null;
         let recognition = null;
         let isListening = false;
+        
+        // STATO VOCE: Di base è spenta (OFF), premi il tasto per attivarla
+        let isAudioEnabled = false;
 
         // MEMORIA CHAT: Recupera la cronologia salvata all'avvio
         let savedChat = [];
@@ -128,9 +133,25 @@
             savedChat = []; 
         }
 
-        // Sintesi Vocale Originale Stabilizzata
+        // Funzione per accendere/spegnere la voce di DIG
+        function toggleAudioOutput() {
+            isAudioEnabled = !isAudioEnabled;
+            const btn = document.getElementById('toggle-audio-btn');
+            if (isAudioEnabled) {
+                btn.innerText = "Voce: ON";
+                btn.classList.remove('text-slate-400', 'border-slate-700', 'bg-slate-950');
+                btn.classList.add('text-emerald-400', 'border-emerald-500', 'bg-emerald-950/30');
+            } else {
+                btn.innerText = "Voce: OFF";
+                btn.classList.remove('text-emerald-400', 'border-emerald-500', 'bg-emerald-950/30');
+                btn.classList.add('text-slate-400', 'border-slate-700', 'bg-slate-950');
+                window.speechSynthesis.cancel(); // Interrompe subito l'audio se viene spento
+            }
+        }
+
+        // Sintesi Vocale Stabilizzata (Legge solo se isAudioEnabled è true)
         function speakText(text) {
-            if (!('speechSynthesis' in window)) return;
+            if (!('speechSynthesis' in window) || !isAudioEnabled) return;
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'it-IT';
@@ -161,13 +182,11 @@
             recognition.onstart = () => {
                 isListening = true;
                 document.getElementById('mic-btn').classList.add('border-emerald-500', 'text-emerald-400', 'animate-pulse');
-                document.getElementById('voice-status').innerText = "Ascolto in corso...";
             };
 
             recognition.onend = () => {
                 isListening = false;
                 document.getElementById('mic-btn').classList.remove('border-emerald-500', 'text-emerald-400', 'animate-pulse');
-                document.getElementById('voice-status').innerText = "Vocale pronto";
             };
 
             recognition.onresult = (event) => {
@@ -250,7 +269,6 @@
             }
         }
 
-        // Interfaccia Grafica originale
         function updateUI() {
             if (bgHistory.length === 0) return;
             const current = bgHistory[bgHistory.length - 1];
@@ -400,7 +418,6 @@
         }
         function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
-
         // RENDER CHAT CON MEMORIA STORICA
         function renderSavedChat() {
             const chatContainer = document.getElementById('chat-messages');
@@ -438,7 +455,6 @@
 
             const chatContainer = document.getElementById('chat-messages');
             
-            // 1. Mostra il messaggio dell'utente a schermo e salvalo in memoria
             chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${userText}</div>`;
             savedChat.push({ type: 'user', text: userText });
             localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
@@ -446,7 +462,6 @@
             input.value = '';
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
-            // Animazione "sta pensando..."
             const typingId = "typing-" + Date.now();
             chatContainer.innerHTML += `<div id="${typingId}" class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-400 italic">DIG sta pensando...</div>`;
             chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -470,7 +485,6 @@
                 if(typingEl) typingEl.remove();
 
                 if (data.reply) {
-                    // 2. Mostra la risposta del bot e salvala in memoria
                     chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${data.reply}</div>`;
                     savedChat.push({ type: 'bot', text: data.reply });
                     localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
@@ -488,7 +502,6 @@
                 const errorReply = "Ops! Non sono riuscito a connettermi al mio server. Controlla di aver configurato correttamente Vercel e la chiave API.";
                 chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
                 
-                // Salva l'errore in memoria solo per coerenza visiva
                 savedChat.push({ type: 'error', text: errorReply });
                 localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
                 
@@ -498,7 +511,7 @@
         }
 
         // Avvio procedure iniziali
-        renderSavedChat(); // Carica la cronologia all'apertura dell'app
+        renderSavedChat();
         fetchCareLinkData();
         setInterval(fetchCareLinkData, 60000);
         updateTimers();
