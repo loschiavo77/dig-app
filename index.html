@@ -14,6 +14,17 @@
         }
         .tab-content { display: none; }
         .tab-content.active { display: flex; flex-direction: column; flex-grow: 1; }
+        /* Stile personalizzato per la barra di scorrimento dell'archivio */
+        ::-webkit-scrollbar {
+            width: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.3);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 2px;
+        }
     </style>
 </head>
 <body class="flex flex-col min-h-screen p-4 max-w-md mx-auto">
@@ -26,9 +37,9 @@
     <div id="tab-archive" class="tab-content justify-between">
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-[68vh]">
             <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 pb-1 border-b border-slate-800">
-                Archivio ultime letture
+                Archivio Storico Glicemie
             </h3>
-            <div id="archive-list" class="flex-grow overflow-y-auto space-y-2 pr-1 font-mono text-sm text-slate-300">
+            <div id="archive-list" class="flex-grow overflow-y-auto space-y-4 pr-1">
                 <div class="text-slate-500 text-xs italic text-center py-4">Caricamento dati storici...</div>
             </div>
         </div>
@@ -65,14 +76,14 @@
                     <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Scadenza Sensore</span>
                     <span id="sensor-timer" class="text-sm font-black text-emerald-400 font-mono block mt-1">--</span>
                 </div>
-                <button onclick="resetTimer('sensor', 10)" class="text-[9px] text-slate-500 hover:text-slate-300 mt-2 bg-slate-950 border border-slate-800 py-1 rounded">Riavvia (10g)</button>
+                <button onclick="promptManualTimer('sensor')" class="text-[9px] text-slate-400 hover:text-slate-200 mt-2 bg-slate-950 border border-slate-800 py-1.5 rounded font-bold">Modifica</button>
             </div>
             <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 text-center flex flex-col justify-between">
                 <div>
                     <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Scadenza Set</span>
                     <span id="set-timer" class="text-sm font-black text-emerald-400 font-mono block mt-1">--</span>
                 </div>
-                <button onclick="resetTimer('set', 3)" class="text-[9px] text-slate-500 hover:text-slate-300 mt-2 bg-slate-950 border border-slate-800 py-1 rounded">Riavvia (3g)</button>
+                <button onclick="promptManualTimer('set')" class="text-[9px] text-slate-400 hover:text-slate-200 mt-2 bg-slate-950 border border-slate-800 py-1.5 rounded font-bold">Modifica</button>
             </div>
         </div>
     </div>
@@ -117,31 +128,24 @@
         async function fetchCareLinkData() {
             document.getElementById('last-sync').innerText = "Sincronizzazione...";
             try {
-                // Leggiamo sia i dati di glicemia che i dettagli sul sensore aggiungendo &sensor=Y
-                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=288&sensor=Y');
+                // Leggiamo fino a 288 record per coprire l'intera giornata e oltre
+                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=288');
                 const data = await response.json();
                 
                 if (data && data.length > 0) {
                     bgHistory = data.map(item => {
                         let date = new Date(item.date);
-                        let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}`;
+                        let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
                         let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
                         let trendWord = "FLAT";
                         if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
                         if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
                         
-                        return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord };
+                        return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord, rawDate: date };
                     }).reverse();
 
                     localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
                     
-                    // Controlla se xDrip+ fornisce lo stato del sensore direttamente
-                    if (data[0] && data[0].sensor_age_hours !== undefined) {
-                        // Se presente calcola la scadenza automatica (es: G6 dura 240 ore)
-                        let remainingHours = Math.max(0, 240 - data[0].sensor_age_hours);
-                        updateTimerDisplay('sensor', remainingHours * 60 * 60 * 1000);
-                    }
-
                     const latestBg = bgHistory[bgHistory.length - 1].value;
                     if (latestBg < 70) triggerAlert(`IPOGLICEMIA: ${latestBg} mg/dL!`);
                     else if (latestBg > 180) triggerAlert(`IPERGLICEMIA: ${latestBg} mg/dL!`);
@@ -168,195 +172,5 @@
             if (current.trend === "DOWN") arrow = "↓";
             document.getElementById('bg-trend').innerText = arrow;
 
-            // 2. Calcolo TIR (Time in Range) ultime 24 ore (ultime 288 letture da 5 min)
-            const readings24h = bgHistory.slice(-288);
-            const inRange = readings24h.filter(item => item.value >= 70 && item.value <= 180).length;
-            const tir = readings24h.length > 0 ? Math.round((inRange / readings24h.length) * 100) : 0;
-            const tirElement = document.getElementById('tir-value');
-            tirElement.innerText = `${tir}%`;
-            
-            // Colore dinamico TIR
-            if (tir >= 70) { tirElement.className = "text-3xl font-black text-emerald-400 font-mono"; }
-            else if (tir >= 50) { tirElement.className = "text-3xl font-black text-yellow-500 font-mono"; }
-            else { tirElement.className = "text-3xl font-black text-red-500 font-mono"; }
-
-            // 3. Archivio (Sinistra)
-            const archiveList = document.getElementById('archive-list');
-            archiveList.innerHTML = '';
-            const archiveData = [...bgHistory].reverse().slice(0, 50); // Mostra fino a 50 letture recenti nell'archivio
-            archiveData.forEach(item => {
-                let colorClass = "text-emerald-400";
-                if (item.value < 70) colorClass = "text-red-400 font-bold";
-                if (item.value > 180) colorClass = "text-yellow-500 font-bold";
-
-                archiveList.innerHTML += `
-                    <div class="flex justify-between items-center border-b border-slate-800/40 py-1.5 text-xs">
-                        <span class="text-slate-500">${item.date} - ${item.time}</span>
-                        <span class="${colorClass}">${item.value} mg/dL</span>
-                    </div>
-                `;
-            });
-
-            // 4. Grafico a Linee Interattivo con Aree di Target Colorate
-            const ctx = document.getElementById('bgChart').getContext('2d');
-            const recentHistory = bgHistory.slice(-24); // Ultime 2 ore (24 punti da 5 min)
-            const labels = recentHistory.map(item => item.time);
-            const values = recentHistory.map(item => item.value);
-
-            if (chartInstance) {
-                chartInstance.data.labels = labels;
-                chartInstance.data.datasets[0].data = values;
-                chartInstance.update();
-            } else {
-                chartInstance = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Glicemia',
-                            data: values,
-                            borderColor: '#e2e8f0', // linea grigia/bianca pulita
-                            borderWidth: 3.5,
-                            pointBackgroundColor: values.map(val => val < 70 ? '#f87171' : val > 180 ? '#fbbf24' : '#34d399'), // punti colorati per stato
-                            pointRadius: 4,
-                            tension: 0.25,
-                            fill: false
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { 
-                            legend: { display: false },
-                            tooltip: {
-                                enabled: true,
-                                backgroundColor: '#0f172a',
-                                titleColor: '#94a3b8',
-                                bodyColor: '#f8fafc',
-                                bodyFont: { weight: 'bold', size: 13 },
-                                callbacks: {
-                                    label: function(context) {
-                                        return `Glicemia: ${context.raw} mg/dL`;
-                                    }
-                                }
-                            }
-                        },
-                        scales: {
-                            y: { 
-                                min: 40,
-                                max: 250,
-                                grid: { color: '#1e293b' }, 
-                                ticks: { color: '#94a3b8' } 
-                            },
-                            x: { 
-                                grid: { display: false }, 
-                                ticks: { color: '#94a3b8', maxTicksLimit: 6 } 
-                            }
-                        }
-                    },
-                    plugins: [{
-                        // Plugin personalizzato per colorare lo sfondo del grafico (Target / Ipo / Iper)
-                        id: 'customAreaBg',
-                        beforeDraw: function(chart) {
-                            const ctx = chart.ctx;
-                            const yAxis = chart.scales.y;
-                            const xAxis = chart.scales.x;
-                            
-                            // Definisce le coordinate pixel per le zone
-                            const y180 = yAxis.getPixelForValue(180);
-                            const y70 = yAxis.getPixelForValue(70);
-                            const yMin = yAxis.getPixelForValue(yAxis.min);
-                            const yMax = yAxis.getPixelForValue(yAxis.max);
-
-                            // Disegna Zona Iperglicemia (Giallo molto tenue)
-                            ctx.fillStyle = 'rgba(239, 68, 68, 0.05)';
-                            ctx.fillRect(xAxis.left, yMax, xAxis.right - xAxis.left, y180 - yMax);
-
-                            // Disegna Zona Target (Verde tenue)
-                            ctx.fillStyle = 'rgba(16, 185, 129, 0.06)';
-                            ctx.fillRect(xAxis.left, y180, xAxis.right - xAxis.left, y70 - y180);
-
-                            // Disegna Zona Ipoglicemia (Rosso tenue)
-                            ctx.fillStyle = 'rgba(239, 68, 68, 0.08)';
-                            ctx.fillRect(xAxis.left, y70, xAxis.right - xAxis.left, yMin - y70);
-                        }
-                    }]
-                });
-            }
-        }
-
-        // --- Gestione Timer Sostituzione ---
-        function resetTimer(type, days) {
-            const expirationTime = Date.now() + (days * 24 * 60 * 60 * 1000);
-            localStorage.setItem(`dig_expire_${type}`, expirationTime);
-            updateTimers();
-        }
-
-        function updateTimers() {
-            ['sensor', 'set'].forEach(type => {
-                const expire = localStorage.getItem(`dig_expire_${type}`);
-                if (!expire) {
-                    document.getElementById(`${type}-timer`).innerText = "Non avviato";
-                    document.getElementById(`${type}-timer`).className = "text-sm font-black text-slate-500 font-mono block mt-1";
-                    return;
-                }
-
-                const diff = expire - Date.now();
-                if (diff <= 0) {
-                    document.getElementById(`${type}-timer`).innerText = "SCADUTO!";
-                    document.getElementById(`${type}-timer`).className = "text-sm font-black text-red-500 font-mono block mt-1 animate-pulse";
-                } else {
-                    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-                    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-                    const mins = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
-                    
-                    document.getElementById(`${type}-timer`).innerText = `${days}g ${hours}o ${mins}m`;
-                    
-                    // Colore di avviso se manca meno di un giorno
-                    if (diff < (24 * 60 * 60 * 1000)) {
-                        document.getElementById(`${type}-timer`).className = "text-sm font-black text-yellow-500 font-mono block mt-1";
-                    } else {
-                        document.getElementById(`${type}-timer`).className = "text-sm font-black text-emerald-400 font-mono block mt-1";
-                    }
-                }
-            });
-        }
-
-        function triggerAlert(message) {
-            const box = document.getElementById('alert-box');
-            box.innerText = message;
-            box.classList.remove('hidden');
-        }
-
-        function silenceAlarm() {
-            document.getElementById('alert-box').classList.add('hidden');
-        }
-
-        function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const userText = input.value.trim();
-            if(!userText) return;
-
-            const chatContainer = document.getElementById('chat-messages');
-            chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${userText}</div>`;
-            input.value = '';
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            setTimeout(() => {
-                let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
-                let reply = `Dato letto da xDrip+: ${currentBg} mg/dL. Come posso aiutarti a gestire questo valore?`;
-                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800">${reply}</div>`;
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-            }, 1000);
-        }
-
-        // Avvio e Loop
-        fetchCareLinkData();
-        setInterval(fetchCareLinkData, 60000);
-        
-        // Loop aggiornamento timer ogni minuto
-        updateTimers();
-        setInterval(updateTimers, 60000);
-    </script>
-</body>
-</html>
+            // 2. Calcolo TIR
+            const inRange = bgHistory.filter(item =>
