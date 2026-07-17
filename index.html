@@ -114,7 +114,7 @@
         let recognition = null;
         let isListening = false;
 
-        // Inizializzazione Riconoscimento Vocale (Telefono)
+        // Inizializzazione Riconoscimento Vocale
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -137,7 +137,7 @@
             recognition.onresult = (event) => {
                 const text = event.results[0][0].transcript;
                 document.getElementById('chat-input').value = text;
-                sendMessage(); // Invia automaticamente dopo aver parlato
+                sendMessage();
             };
         }
 
@@ -148,8 +148,8 @@
 
         function speakText(text) {
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // Ferma letture precedenti
-                const utterance = new Utterance(text);
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = 'it-IT';
                 utterance.rate = 1.0;
                 window.speechSynthesis.speak(utterance);
@@ -186,7 +186,6 @@
 
                     localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
                     
-                    // Controlli Allarmi in tempo reale e predittivi
                     checkRealtimeAndPredictiveAlerts();
                     updateUI();
                     
@@ -198,23 +197,20 @@
             }
         }
 
-        // Algoritmo Predittivo e Allarmi
         function checkRealtimeAndPredictiveAlerts() {
             if (bgHistory.length < 4) return;
             
             const current = bgHistory[bgHistory.length - 1].value;
             
-            // 1. Allarme Real-time immediato
             if (current < 70) triggerAlert(`IMMEDIATO: IPOGLICEMIA REALE A ${current} mg/dL!`);
             else if (current > 180) triggerAlert(`IMMEDIATO: IPERGLICEMIA REALE A ${current} mg/dL!`);
             else silenceAlarm();
 
-            // 2. Allarme Predittivo (Calcolo variazione negli ultimi 15 minuti / ultime 3 letture)
             const p1 = bgHistory[bgHistory.length - 1].value;
-            const p4 = bgHistory[bgHistory.length - 4].value; // lettura di 15 min fa
+            const p4 = bgHistory[bgHistory.length - 4].value;
             
-            const delta15min = p1 - p4; // Variazione totale in 15 minuti
-            const stimaProssimi15min = p1 + delta15min; // Proiezione lineare
+            const delta15min = p1 - p4;
+            const stimaProssimi15min = p1 + delta15min;
 
             const predictiveBox = document.getElementById('predictive-alert-box');
             
@@ -232,7 +228,6 @@
         function updateUI() {
             if (bgHistory.length === 0) return;
 
-            // 1. Glicemia Attuale
             const current = bgHistory[bgHistory.length - 1];
             document.getElementById('bg-value').innerText = current.value;
             
@@ -241,7 +236,6 @@
             if (current.trend === "DOWN") arrow = "↓";
             document.getElementById('bg-trend').innerText = arrow;
 
-            // 2. Calcolo TIR
             const inRange = bgHistory.filter(item => item.value >= 70 && item.value <= 180).length;
             const tir = bgHistory.length > 0 ? Math.round((inRange / bgHistory.length) * 100) : 0;
             const tirElement = document.getElementById('tir-value');
@@ -251,7 +245,6 @@
             else if (tir >= 50) { tirElement.className = "text-3xl font-black text-yellow-500 font-mono"; }
             else { tirElement.className = "text-3xl font-black text-red-500 font-mono"; }
 
-            // 3. Archivio Diviso per Giorni
             const archiveList = document.getElementById('archive-list');
             archiveList.innerHTML = '';
             const groupedData = {};
@@ -294,7 +287,6 @@
                 archiveList.innerHTML += groupHTML;
             }
 
-            // 4. Grafico a Linee Avanzato
             const ctx = document.getElementById('bgChart').getContext('2d');
             const recentHistory = bgHistory.slice(-24);
             const labels = recentHistory.map(item => item.time);
@@ -394,8 +386,8 @@
         }
         function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
-        // Gestione messaggi e risposta vocale
-        function sendMessage() {
+        // Gestione messaggi inviati al Backend Vercel reale
+        async function sendMessage() {
             const input = document.getElementById('chat-input');
             const userText = input.value.trim();
             if(!userText) return;
@@ -405,17 +397,40 @@
             input.value = '';
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
-            // Simulazione intelligente temporanea prima del server reale
-            setTimeout(() => {
-                let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
-                let reply = `Ho ricevuto la tua richiesta! Al momento la tua glicemia letta da xDrip+ è di ${currentBg} mg/dL. Sto impostando il server esterno per rispondere a ogni tua domanda globale.`;
-                
-                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${reply}</div>`;
+            const typingId = "typing-" + Date.now();
+            chatContainer.innerHTML += `<div id="${typingId}" class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-400 italic">DIG sta pensando...</div>`;
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
+
+            try {
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: userText,
+                        currentBg: currentBg
+                    })
+                });
+
+                const data = await response.json();
+                document.getElementById(typingId).remove();
+
+                if (data.reply) {
+                    chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${data.reply}</div>`;
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    speakText(data.reply);
+                } else {
+                    throw new Error();
+                }
+
+            } catch (err) {
+                document.getElementById(typingId).remove();
+                const errorReply = "Ops! Non sono riuscito a connettermi al mio server. Controlla di aver configurato correttamente Vercel e la chiave API.";
+                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
                 chatContainer.scrollTop = chatContainer.scrollHeight;
-                
-                // DIG ti risponde parlando!
-                speakText(reply);
-            }, 1000);
+                speakText(errorReply);
+            }
         }
 
         fetchCareLinkData();
