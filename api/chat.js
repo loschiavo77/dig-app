@@ -11,22 +11,27 @@ export default async function handler(req, res) {
     }
 
     try {
-        const response = await fetch('https://api.cohere.ai/v1/chat', {
+        const response = await fetch('https://api.cohere.com/v1/chat', {
             method: 'POST',
             headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: `Sei DIG, un assistente virtuale amichevole per la gestione della glicemia. Il valore attuale dell'utente è ${currentBg || 'non pervenuto'} mg/dL. Rispondi in modo chiaro, empatico e breve a questa richiesta: ${message}`,
-                model: 'command-r-plus'
+                message: message,
+                preamble: `Sei DIG, un assistente amichevole per la gestione della glicemia. Il valore attuale dell'utente è ${currentBg || 'non pervenuto'} mg/dL. Rispondi in modo chiaro, empatico e molto breve.`,
+                model: 'command-r'
             })
         });
 
         const data = await response.json();
-        const reply = data.text || "Non sono riuscito a generare una risposta.";
-        return res.status(200).json({ reply: reply });
+        
+        if (data.text) {
+            return res.status(200).json({ reply: data.text });
+        } else {
+            return res.status(200).json({ reply: "L'IA ha risposto in modo non corretto." });
+        }
     } catch (error) {
-        return res.status(500).json({ reply: "Errore di connessione con l'IA." });
+        return res.status(500).json({ reply: "Errore di connessione con il server." });
     }
 }
