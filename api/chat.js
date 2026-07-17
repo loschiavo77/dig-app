@@ -4,28 +4,42 @@ export default async function handler(req, res) {
     }
 
     const { message, currentBg } = req.body;
-    const msg = message.toLowerCase();
-    let reply = "";
+    const apiKey = process.env.COHERE_API_KEY;
 
-    // Il "cervello locale" dell'assistente DIG
-    if (msg.includes("ciao") || msg.includes("salva")) {
-        reply = `Ciao! Sono il tuo assistente DIG. La tua glicemia attuale è di ${currentBg} mg/dL. Come posso aiutarti oggi?`;
-    } else if (msg.includes("glicemia") || msg.includes("valore") || msg.includes("sto")) {
-        const bg = parseInt(currentBg);
-        if (isNaN(bg)) {
-            reply = "Al momento non ho ricevuto letture valide da xDrip+. Controlla che l'app sia avviata sul telefono!";
-        } else if (bg < 70) {
-            reply = `La tua glicemia è bassa (${bg} mg/dL). Ricordati di assumere carboidrati a rapido assorbimento e avvisa un adulto se non ti senti bene!`;
-        } else if (bg > 180) {
-            reply = `La tua glicemia è alta (${bg} mg/dL). Controlla se è il caso di fare una correzione o di bere dell'acqua, e parlane con un adulto.`;
-        } else {
-            reply = `La tua glicemia è di ${currentBg} mg/dL, sei perfettamente all'interno del tuo target! Ottimo lavoro, continua così.`;
-        }
-    } else if (msg.includes("grazie")) {
-        reply = "Di nulla! Sono sempre qui a disposizione per darti una mano con i dati del sensore.";
-    } else {
-        reply = `Ho ricevuto il tuo messaggio! Ti ricordo che la tua glicemia attuale è ${currentBg} mg/dL. Se hai dubbi sulla terapia o sui valori, confrontati sempre con un adulto o con il tuo medico.`;
+    if (!apiKey) {
+        return res.status(500).json({ reply: "Errore: chiave API di Cohere non configurata su Vercel." });
     }
 
-    return res.status(200).json({ reply: reply });
+    const prompt = `Sei DIG, un assistente virtuale amichevole per la gestione della glicemia.
+Il valore glicemico attuale dell'utente è di ${currentBg || 'non pervenuto'} mg/dL.
+Rispondi in modo chiaro, empatico e breve alla seguente richiesta dell'utente. 
+
+Richiesta dell'utente: "${message}"`;
+
+    try {
+        const response = await fetch('https://api.cohere.ai/v1/generate', {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+                'Cohere-Version': '2022-12-06'
+            },
+            body: JSON.stringify({
+                model: 'command',
+                prompt: prompt,
+                max_tokens: 150,
+                temperature: 0.7,
+                k: 0,
+                stop_sequences: [],
+                return_likelihoods: 'NONE'
+            })
+        });
+
+        const data = await response.json();
+        const reply = data.generations && data.generations[0] ? data.generations[0].text.trim() : "Non sono riuscito a elaborare una risposta.";
+        
+        return res.status(200).json({ reply: reply });
+    } catch (error) {
+        return res.status(500).json({ reply: "C'è stato un problema di connessione con il cervello dell'IA." });
+    }
 }
