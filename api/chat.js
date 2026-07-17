@@ -3,7 +3,8 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Metodo non consentito' });
     }
 
-    const { message, history, currentBg } = req.body;
+    // Riceviamo anche il trend della glicemia dal telefono (es. "stabile", "in aumento", "↓", "→")
+    const { message, history, currentBg, bgTrend } = req.body;
     const apiKey = process.env.COHERE_API_KEY;
 
     if (!apiKey) {
@@ -20,7 +21,9 @@ export default async function handler(req, res) {
             }));
     }
 
-    const messaggioConGlicemia = `[Dato in tempo reale - Glicemia attuale: ${currentBg} mg/dL] L'utente dice: ${message}`;
+    // Costruiamo il blocco dati in tempo reale includendo il trend se presente
+    const trendInfo = bgTrend ? ` (Trend: ${bgTrend})` : '';
+    const messaggioConGlicemia = `[Dato in tempo reale - Glicemia attuale: ${currentBg} mg/dL${trendInfo}] L'utente dice: ${message}`;
 
     try {
         const response = await fetch('https://api.cohere.com/v1/chat', {
@@ -32,9 +35,8 @@ export default async function handler(req, res) {
             body: JSON.stringify({
                 message: messaggioConGlicemia,
                 chat_history: cohereChatHistory,
-                // ABILITA LA RICERCA WEB: permette a Cohere di cercare su internet in tempo reale
-                connectors: [{ id: "web-search" }], 
-                preamble: "Sei DIG, un assistente virtuale e intelligenza guida per il diabete. Conosci SEMPRE la glicemia attuale dell'utente perché ti viene fornita nei dati in tempo reale del messaggio. Se l'utente ti chiede notizie recenti, risultati sportivi o informazioni aggiornate, usa il connettore di ricerca web per trovare la risposta reale. Sfrutta i messaggi passati della chat per dare risposte precise. Sii estremamente sintetico e rispondi in pochissime battute. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'. Ricorda che oggi è venerdì 17 luglio 2026.",
+                // Nuove istruzioni nel preambolo per la formattazione e l'analisi del trend
+                preamble: "Sei DIG, un assistente virtuale e intelligenza guida per il diabete. Conosci SEMPRE la glicemia attuale e la sua tendenza (trend) perché ti vengono fornite nei dati in tempo reale. Usa queste informazioni combinate per dare risposte precise e protettive. Regole di stile: 1. Sii estremamente sintetico. 2. Usa il **grassetto** per evidenziare i dati numerici importanti, i valori glicemici o i concetti chiave. 3. Se devi elencare più di due elementi, usa brevi elenchi puntati. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'. Ricorda che oggi è venerdì 17 luglio 2026.",
                 model: 'command-r-08-2024'
             })
         });
