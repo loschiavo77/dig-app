@@ -19,20 +19,18 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify({
                 message: message,
-                preamble: `Sei DIG, un assistente amichevole per la gestione della glicemia. Il valore attuale dell'utente è ${currentBg || 'non pervenuto'} mg/dL. Rispondi in modo chiaro, empatico e molto breve.`,
-                model: 'command-r'
+                preamble: `Sei DIG, un assistente amichevole per la gestione della glicemia. Il valore attuale dell'utente è ${currentBg || 'non pervenuto'} mg/dL. Rispondi in modo chiaro, empatico e breve.`,
+                model: 'command'
             })
         });
 
         const data = await response.json();
         
-        // Controlliamo tutti i possibili formati di risposta di Cohere
         const replyText = data.text || (data.generations && data.generations[0] && data.generations[0].text) || data.response || null;
 
         if (replyText) {
             return res.status(200).json({ reply: replyText.trim() });
         } else {
-            // Se c'è un errore specifico da Cohere, lo mostriamo per capire meglio
             const errorMsg = data.message || JSON.stringify(data);
             return res.status(200).json({ reply: `Nota di Cohere: ${errorMsg}` });
         }
