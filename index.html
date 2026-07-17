@@ -4,6 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DIG - Diabetes Intelligence Guide</title>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22DIG%22,%22short_name%22:%22DIG%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23020617%22,%22theme_color%22:%22%23020617%22}">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -83,13 +89,13 @@
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-full justify-between">
             <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-1 flex items-center justify-between">
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> DIG Assistant Intel</span>
-                <span id="voice-status" class="text-[9px] text-slate-500 normal-case font-mono">Vocale pronto</span>
+                <div class="flex items-center gap-2">
+                    <button onclick="clearChatMemory()" class="text-[9px] text-red-400 font-mono underline opacity-50 hover:opacity-100">Svuota</button>
+                    <span id="voice-status" class="text-[9px] text-slate-500 normal-case font-mono">Vocale pronto</span>
+                </div>
             </h3>
             <div id="chat-messages" class="flex-grow overflow-y-auto space-y-2 mb-3 text-sm flex flex-col pr-1">
-                <div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">
-                    Ciao! Sono l'assistente DIG avanzato. Puoi scrivermi o toccare il microfono per parlare a voce. Chiedimi qualunque cosa!
                 </div>
-            </div>
             <div class="flex gap-2 items-center">
                 <button id="mic-btn" onclick="toggleVoiceInput()" class="bg-slate-950 hover:bg-slate-800 border border-slate-800 p-2.5 rounded-lg text-slate-400 hover:text-emerald-400 transition-all">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -114,7 +120,37 @@
         let recognition = null;
         let isListening = false;
 
-        // Inizializzazione Riconoscimento Vocale
+        // MEMORIA CHAT: Recupera la cronologia salvata all'avvio
+        let savedChat = [];
+        try {
+            savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
+        } catch(e) { 
+            savedChat = []; 
+        }
+
+        // Sintesi Vocale Originale Stabilizzata
+        function speakText(text) {
+            if (!('speechSynthesis' in window)) return;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'it-IT';
+            utterance.rate = 0.95;
+            utterance.pitch = 0.85;
+
+            const voices = window.speechSynthesis.getVoices();
+            let selectedVoice = voices.find(v => v.lang.startsWith('it') && v.name.toLowerCase().includes('google') && !v.name.toLowerCase().includes('female'));
+            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it') && (v.name.toLowerCase().includes('cosimo') || v.name.toLowerCase().includes('male')));
+            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it'));
+
+            if (selectedVoice) utterance.voice = selectedVoice;
+            window.speechSynthesis.speak(utterance);
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = () => { console.log("Voci caricate"); };
+        }
+
+        // Riconoscimento Vocale (Microfono)
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -146,24 +182,16 @@
             if (isListening) recognition.stop(); else recognition.start();
         }
 
-        function speakText(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'it-IT';
-                utterance.rate = 1.0;
-                window.speechSynthesis.speak(utterance);
-            }
-        }
-
         function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('text-emerald-400'));
             document.querySelectorAll('.nav-btn').forEach(el => el.classList.add('text-slate-500'));
             
             document.getElementById('tab-' + tabName).classList.add('active');
-            event.target.classList.remove('text-slate-500');
-            event.target.classList.add('text-emerald-400');
+            if(event && event.target) {
+                event.target.classList.remove('text-slate-500');
+                event.target.classList.add('text-emerald-400');
+            }
         }
 
         async function fetchCareLinkData() {
@@ -199,7 +227,6 @@
 
         function checkRealtimeAndPredictiveAlerts() {
             if (bgHistory.length < 4) return;
-            
             const current = bgHistory[bgHistory.length - 1].value;
             
             if (current < 70) triggerAlert(`IMMEDIATO: IPOGLICEMIA REALE A ${current} mg/dL!`);
@@ -208,12 +235,10 @@
 
             const p1 = bgHistory[bgHistory.length - 1].value;
             const p4 = bgHistory[bgHistory.length - 4].value;
-            
             const delta15min = p1 - p4;
             const stimaProssimi15min = p1 + delta15min;
 
             const predictiveBox = document.getElementById('predictive-alert-box');
-            
             if (stimaProssimi15min < 70 && current >= 70) {
                 predictiveBox.innerText = `PREDISPOSIZIONE IPO: Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
                 predictiveBox.classList.remove('hidden');
@@ -225,9 +250,9 @@
             }
         }
 
+        // Interfaccia Grafica originale
         function updateUI() {
             if (bgHistory.length === 0) return;
-
             const current = bgHistory[bgHistory.length - 1];
             document.getElementById('bg-value').innerText = current.value;
             
@@ -241,16 +266,15 @@
             const tirElement = document.getElementById('tir-value');
             tirElement.innerText = `${tir}%`;
             
-            if (tir >= 70) { tirElement.className = "text-3xl font-black text-emerald-400 font-mono"; }
-            else if (tir >= 50) { tirElement.className = "text-3xl font-black text-yellow-500 font-mono"; }
-            else { tirElement.className = "text-3xl font-black text-red-500 font-mono"; }
+            if (tir >= 70) tirElement.className = "text-3xl font-black text-emerald-400 font-mono";
+            else if (tir >= 50) tirElement.className = "text-3xl font-black text-yellow-500 font-mono";
+            else tirElement.className = "text-3xl font-black text-red-500 font-mono";
 
             const archiveList = document.getElementById('archive-list');
             archiveList.innerHTML = '';
             const groupedData = {};
-            const archiveSorted = [...bgHistory].reverse();
             
-            archiveSorted.forEach(item => {
+            [...bgHistory].reverse().forEach(item => {
                 let label = item.date;
                 const today = new Date();
                 const yesterday = new Date();
@@ -266,22 +290,12 @@
             });
 
             for (const [giorno, letture] of Object.entries(groupedData)) {
-                let groupHTML = `
-                    <div class="bg-slate-950/40 border border-slate-800/50 rounded-lg p-3">
-                        <h4 class="text-xs font-bold text-emerald-400/90 mb-2 border-b border-slate-800 pb-1">${giorno}</h4>
-                        <div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                `;
+                let groupHTML = `<div class="bg-slate-950/40 border border-slate-800/50 rounded-lg p-3"><h4 class="text-xs font-bold text-emerald-400/90 mb-2 border-b border-slate-800 pb-1">${giorno}</h4><div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">`;
                 letture.forEach(item => {
                     let colorClass = "text-emerald-400";
                     if (item.value < 70) colorClass = "text-red-400 font-bold";
                     if (item.value > 180) colorClass = "text-yellow-500 font-bold";
-
-                    groupHTML += `
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="text-slate-500">${item.time}</span>
-                            <span class="${colorClass}">${item.value} mg/dL</span>
-                        </div>
-                    `;
+                    groupHTML += `<div class="flex justify-between items-center text-xs"><span class="text-slate-500">${item.time}</span><span class="${colorClass}">${item.value} mg/dL</span></div>`;
                 });
                 groupHTML += `</div></div>`;
                 archiveList.innerHTML += groupHTML;
@@ -386,17 +400,53 @@
         }
         function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
-        // Gestione messaggi inviati al Backend Vercel reale
+
+        // RENDER CHAT CON MEMORIA STORICA
+        function renderSavedChat() {
+            const chatContainer = document.getElementById('chat-messages');
+            chatContainer.innerHTML = '';
+            
+            if(savedChat.length === 0) {
+                chatContainer.innerHTML = `<div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">Ciao! Sono l'assistente DIG avanzato. Puoi scrivermi o toccare il microfono per parlare a voce. Chiedimi qualunque cosa!</div>`;
+            } else {
+                savedChat.forEach(msg => {
+                    if (msg.type === 'user') {
+                        chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${msg.text}</div>`;
+                    } else if (msg.type === 'bot') {
+                        chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${msg.text}</div>`;
+                    } else if (msg.type === 'error') {
+                        chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${msg.text}</div>`;
+                    }
+                });
+            }
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function clearChatMemory() {
+            if(confirm("Vuoi cancellare definitivamente tutta la cronologia della chat?")) {
+                localStorage.removeItem('dig_chat_history');
+                savedChat = [];
+                renderSavedChat();
+            }
+        }
+
+        // FUNZIONE INVIO MESSAGGI STABILE + SALVATAGGIO IN LOCALE
         async function sendMessage() {
             const input = document.getElementById('chat-input');
             const userText = input.value.trim();
             if(!userText) return;
 
             const chatContainer = document.getElementById('chat-messages');
+            
+            // 1. Mostra il messaggio dell'utente a schermo e salvalo in memoria
             chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${userText}</div>`;
+            savedChat.push({ type: 'user', text: userText });
+            localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
+            
             input.value = '';
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
+            // Animazione "sta pensando..."
             const typingId = "typing-" + Date.now();
             chatContainer.innerHTML += `<div id="${typingId}" class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-400 italic">DIG sta pensando...</div>`;
             chatContainer.scrollTop = chatContainer.scrollHeight;
@@ -413,26 +463,42 @@
                     })
                 });
 
+                if(!response.ok) throw new Error("Server error");
                 const data = await response.json();
-                document.getElementById(typingId).remove();
+                
+                const typingEl = document.getElementById(typingId);
+                if(typingEl) typingEl.remove();
 
                 if (data.reply) {
+                    // 2. Mostra la risposta del bot e salvala in memoria
                     chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${data.reply}</div>`;
+                    savedChat.push({ type: 'bot', text: data.reply });
+                    localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
+                    
                     chatContainer.scrollTop = chatContainer.scrollHeight;
                     speakText(data.reply);
                 } else {
-                    throw new Error();
+                    throw new Error("No reply");
                 }
 
             } catch (err) {
-                document.getElementById(typingId).remove();
+                const typingEl = document.getElementById(typingId);
+                if(typingEl) typingEl.remove();
+                
                 const errorReply = "Ops! Non sono riuscito a connettermi al mio server. Controlla di aver configurato correttamente Vercel e la chiave API.";
                 chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
+                
+                // Salva l'errore in memoria solo per coerenza visiva
+                savedChat.push({ type: 'error', text: errorReply });
+                localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
+                
                 chatContainer.scrollTop = chatContainer.scrollHeight;
                 speakText(errorReply);
             }
         }
 
+        // Avvio procedure iniziali
+        renderSavedChat(); // Carica la cronologia all'apertura dell'app
         fetchCareLinkData();
         setInterval(fetchCareLinkData, 60000);
         updateTimers();
