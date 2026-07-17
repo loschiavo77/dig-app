@@ -10,7 +10,6 @@ export default async function handler(req, res) {
         return res.status(500).json({ reply: "Errore: chiave API non configurata." });
     }
 
-    // Convertiamo la cronologia nel formato ufficiale richiesto da Cohere (chat_history)
     let cohereChatHistory = [];
     if (history && Array.isArray(history)) {
         cohereChatHistory = history
@@ -21,7 +20,6 @@ export default async function handler(req, res) {
             }));
     }
 
-    // Arricchiamo il messaggio dell'utente inserendo il dato della glicemia attuale in tempo reale
     const messaggioConGlicemia = `[Dato in tempo reale - Glicemia attuale: ${currentBg} mg/dL] L'utente dice: ${message}`;
 
     try {
@@ -32,9 +30,11 @@ export default async function handler(req, res) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: messaggioConGlicemia, // Inviamo la domanda con il dato glicemico integrato
+                message: messaggioConGlicemia,
                 chat_history: cohereChatHistory,
-                preamble: "Sei DIG, un assistente virtuale e intelligenza guida per il diabete. Conosci SEMPRE la glicemia attuale dell'utente perché ti viene fornita nei dati in tempo reale del messaggio. Sfrutta i messaggi passati della chat per dare risposte precise. Sii estremamente sintetico e rispondi in pochissime battute. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'. Ricorda che oggi è venerdì 17 luglio 2026.",
+                // ABILITA LA RICERCA WEB: permette a Cohere di cercare su internet in tempo reale
+                connectors: [{ id: "web-search" }], 
+                preamble: "Sei DIG, un assistente virtuale e intelligenza guida per il diabete. Conosci SEMPRE la glicemia attuale dell'utente perché ti viene fornita nei dati in tempo reale del messaggio. Se l'utente ti chiede notizie recenti, risultati sportivi o informazioni aggiornate, usa il connettore di ricerca web per trovare la risposta reale. Sfrutta i messaggi passati della chat per dare risposte precise. Sii estremamente sintetico e rispondi in pochissime battute. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'. Ricorda che oggi è venerdì 17 luglio 2026.",
                 model: 'command-r-08-2024'
             })
         });
