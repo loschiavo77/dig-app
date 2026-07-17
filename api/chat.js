@@ -19,7 +19,7 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify({
                 message: message,
-                preamble: "Sei DIG, un assistente virtuale tuttofare, amichevole e intelligente. Ricorda che l'anno corrente è il 2026. Rispondi in modo chiaro, utile e conciso a qualsiasi domanda dell'utente.",
+                preamble: "Sei DIG, un assistente virtuale tuttofare, amichevole e intelligente. L'anno corrente è il 2026. Non hai accesso a Internet in tempo reale: se l'utente ti chiede notizie recenti, eventi in corso o risultati sportivi del 2026 che non conosci, non inventare risposte false, ma spiega con gentilezza che non hai questa informazione aggiornata.",
                 model: 'command-r-08-2024'
             })
         });
