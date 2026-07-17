@@ -3,8 +3,7 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Metodo non consentito' });
     }
 
-    // Riceviamo il messaggio corrente e la cronologia inviata dal telefono
-    const { message, history } = req.body;
+    const { message, history, currentBg } = req.body;
     const apiKey = process.env.COHERE_API_KEY;
 
     if (!apiKey) {
@@ -15,12 +14,15 @@ export default async function handler(req, res) {
     let cohereChatHistory = [];
     if (history && Array.isArray(history)) {
         cohereChatHistory = history
-            .filter(msg => msg.role === 'user' || msg.role === 'assistant') // Escludiamo il prompt di sistema vecchio
+            .filter(msg => msg.role === 'user' || msg.role === 'assistant')
             .map(msg => ({
                 role: msg.role === 'user' ? 'USER' : 'CHATBOT',
                 message: msg.content
             }));
     }
+
+    // Arricchiamo il messaggio dell'utente inserendo il dato della glicemia attuale in tempo reale
+    const messaggioConGlicemia = `[Dato in tempo reale - Glicemia attuale: ${currentBg} mg/dL] L'utente dice: ${message}`;
 
     try {
         const response = await fetch('https://api.cohere.com/v1/chat', {
@@ -30,10 +32,9 @@ export default async function handler(req, res) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                message: message,
-                chat_history: cohereChatHistory, // Passiamo la memoria storica a Cohere!
-                // Nel preambolo impostiamo la data, la sinteticità e l'obbligo del saluto fisso
-                preamble: "Sei DIG, un assistente virtuale e intelligenza guida per il diabete, amichevole e intelligente. Sfrutta i messaggi passati della chat per dare risposte precise. Sii estremamente sintetico e rispondi in pochissime battute. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'. Ricorda che oggi è venerdì 17 luglio 2026. Non hai accesso a Internet in tempo reale: se l'utente ti chiede notizie recenti o risultati sportivi che non conosci, non inventare risposte, ma spiega che non hai l'informazione aggiornata.",
+                message: messaggioConGlicemia, // Inviamo la domanda con il dato glicemico integrato
+                chat_history: cohereChatHistory,
+                preamble: "Sei DIG, un assistente virtuale e intelligenza guida per il diabete. Conosci SEMPRE la glicemia attuale dell'utente perché ti viene fornita nei dati in tempo reale del messaggio. Sfrutta i messaggi passati della chat per dare risposte precise. Sii estremamente sintetico e rispondi in pochissime battute. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'. Ricorda che oggi è venerdì 17 luglio 2026.",
                 model: 'command-r-08-2024'
             })
         });
