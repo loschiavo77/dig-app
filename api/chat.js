@@ -26,10 +26,15 @@ export default async function handler(req, res) {
 
         const data = await response.json();
         
-        if (data.text) {
-            return res.status(200).json({ reply: data.text });
+        // Controlliamo tutti i possibili formati di risposta di Cohere
+        const replyText = data.text || (data.generations && data.generations[0] && data.generations[0].text) || data.response || null;
+
+        if (replyText) {
+            return res.status(200).json({ reply: replyText.trim() });
         } else {
-            return res.status(200).json({ reply: "L'IA ha risposto in modo non corretto." });
+            // Se c'è un errore specifico da Cohere, lo mostriamo per capire meglio
+            const errorMsg = data.message || JSON.stringify(data);
+            return res.status(200).json({ reply: `Nota di Cohere: ${errorMsg}` });
         }
     } catch (error) {
         return res.status(500).json({ reply: "Errore di connessione con il server." });
