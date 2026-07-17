@@ -90,14 +90,13 @@
             <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-1 flex items-center justify-between">
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> DIG Assistant Intel</span>
                 <div class="flex items-center gap-3">
-                    <button id="toggle-audio-btn" onclick="toggleAudioOutput()" class="text-[10px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-950 text-slate-400 font-bold transition-colors">
+                    <button id="toggle-audio-btn" onclick="toggleAudioOutput()" class="text-[9px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-950 text-slate-400 font-bold transition-colors">
                         Voce: OFF
                     </button>
                     <button onclick="clearChatMemory()" class="text-[9px] text-red-400 font-mono underline opacity-50 hover:opacity-100">Svuota</button>
                 </div>
             </h3>
-            <div id="chat-messages" class="flex-grow overflow-y-auto space-y-2 mb-3 text-sm flex flex-col pr-1">
-                </div>
+            <div id="chat-messages" class="flex-grow overflow-y-auto space-y-2 mb-3 text-sm flex flex-col pr-1"></div>
             <div class="flex gap-2 items-center">
                 <button id="mic-btn" onclick="toggleVoiceInput()" class="bg-slate-950 hover:bg-slate-800 border border-slate-800 p-2.5 rounded-lg text-slate-400 hover:text-emerald-400 transition-all">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -122,10 +121,9 @@
         let recognition = null;
         let isListening = false;
         
-        // STATO VOCE: Di base è spenta (OFF), premi il tasto per attivarla
+        // GESTIONE STATO VOCE (Spenta all'avvio)
         let isAudioEnabled = false;
 
-        // MEMORIA CHAT: Recupera la cronologia salvata all'avvio
         let savedChat = [];
         try {
             savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
@@ -133,7 +131,7 @@
             savedChat = []; 
         }
 
-        // Funzione per accendere/spegnere la voce di DIG
+        // Funzione per accendere/spegnere la sintesi vocale delle risposte
         function toggleAudioOutput() {
             isAudioEnabled = !isAudioEnabled;
             const btn = document.getElementById('toggle-audio-btn');
@@ -145,13 +143,13 @@
                 btn.innerText = "Voce: OFF";
                 btn.classList.remove('text-emerald-400', 'border-emerald-500', 'bg-emerald-950/30');
                 btn.classList.add('text-slate-400', 'border-slate-700', 'bg-slate-950');
-                window.speechSynthesis.cancel(); // Interrompe subito l'audio se viene spento
+                window.speechSynthesis.cancel(); // Blocca subito l'audio se si spegne mentre parla
             }
         }
 
-        // Sintesi Vocale Stabilizzata (Legge solo se isAudioEnabled è true)
+        // Sintesi Vocale Condizionata dallo Stato
         function speakText(text) {
-            if (!('speechSynthesis' in window) || !isAudioEnabled) return;
+            if (!('speechSynthesis' in window) || !isAudioEnabled) return; // Se disattivato, non parla
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'it-IT';
@@ -384,12 +382,24 @@
             }
         }
 
+        // TIMER AVANZATO GIORNI + ORE
         function promptManualTimer(type) {
-            const inputGiorni = prompt(`Quanti GIORNI deve durare il nuovo timer?`, type === 'sensor' ? "10" : "3");
+            const inputGiorni = prompt(`[${type.toUpperCase()}] Quanti GIORNI deve durare?`, type === 'sensor' ? "10" : "3");
             if (inputGiorni === null) return;
-            const giorni = parseFloat(inputGiorni);
-            if (isNaN(giorni) || giorni < 0) return;
-            const expirationTime = Date.now() + (giorni * 24 * 60 * 60 * 1000);
+            
+            const inputOre = prompt(`[${type.toUpperCase()}] Quante ORE aggiuntive?`, "0");
+            if (inputOre === null) return;
+
+            const giorni = parseFloat(inputGiorni) || 0;
+            const ore = parseFloat(inputOre) || 0;
+
+            if (giorni < 0 || ore < 0 || (giorni === 0 && ore === 0)) return;
+
+            // Calcolo del tempo totale in millisecondi
+            const msGiorni = giorni * 24 * 60 * 60 * 1000;
+            const msOre = ore * 60 * 60 * 1000;
+            const expirationTime = Date.now() + msGiorni + msOre;
+
             localStorage.setItem(`dig_expire_${type}`, expirationTime);
             updateTimers();
         }
@@ -406,6 +416,7 @@
                     const days = Math.floor(diff / (24 * 60 * 60 * 1000));
                     const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
                     const mins = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+                    
                     document.getElementById(`${type}-timer`).innerText = `${days}g ${hours}o ${mins}m`;
                     document.getElementById(`${type}-timer`).className = diff < (24 * 60 * 60 * 1000) ? "text-sm font-black text-yellow-500 font-mono block mt-1" : "text-sm font-black text-emerald-400 font-mono block mt-1";
                 }
@@ -418,7 +429,6 @@
         }
         function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
-        // RENDER CHAT CON MEMORIA STORICA
         function renderSavedChat() {
             const chatContainer = document.getElementById('chat-messages');
             chatContainer.innerHTML = '';
@@ -447,7 +457,6 @@
             }
         }
 
-        // FUNZIONE INVIO MESSAGGI STABILE + SALVATAGGIO IN LOCALE
         async function sendMessage() {
             const input = document.getElementById('chat-input');
             const userText = input.value.trim();
@@ -510,7 +519,6 @@
             }
         }
 
-        // Avvio procedure iniziali
         renderSavedChat();
         fetchCareLinkData();
         setInterval(fetchCareLinkData, 60000);
