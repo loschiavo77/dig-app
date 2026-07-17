@@ -388,32 +388,45 @@
             fetchCareLinkData();
         }
 
+        
         async function fetchCareLinkData() {
-            const user = localStorage.getItem('cl_user');
-            const pass = localStorage.getItem('cl_pass');
-            const region = localStorage.getItem('cl_region') || 'EU';
-
-            if(!user || !pass) return;
-
-            document.getElementById('last-sync').innerText = "Sincronizzazione...";
-
-            try {
-                let randomBg = Math.floor(Math.random() * (160 - 90 + 1)) + 90;
-                let now = new Date();
-                let timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    document.getElementById('last-sync').innerText = "Sincronizzazione...";
+    try {
+        // Legge i dati trasmessi localmente da xDrip+ sul telefono
+        const response = await fetch('http://127.0.0.1:17580/sgv.json?count=12');
+        const data = await response.json();
+        
+        if (data && data.length > 0) {
+            // Svuota la vecchia cronologia e inserisce i dati reali di xDrip+
+            bgHistory = data.map(item => {
+                let date = new Date(item.date);
+                let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+                let trendWord = "FLAT";
+                if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
+                if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
                 
-                bgHistory.push({ time: timeStr, value: randomBg, trend: "FLAT" });
-                if(bgHistory.length > 12) bgHistory.shift();
-                
-                localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
-                
-                if(randomBg < 70) triggerAlert(`IPOGLICEMIA: ${randomBg} mg/dL!`);
-                else if(randomBg > 180) triggerAlert(`IPERGLICEMIA: ${randomBg} mg/dL!`);
-                else silenceAlarm();
+                return {
+                    time: timeStr,
+                    value: item.sgv,
+                    trend: trendWord
+                };
+            }).reverse();
 
-                updateUI();
-                document.getElementById('last-sync').innerText = `Sincronizzato: ${timeStr}`;
-            } catch (err) {
+            localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
+            
+            const latestBg = bgHistory[bgHistory.length - 1].value;
+            if (latestBg < 70) triggerAlert(`IPOGLICEMIA: ${latestBg} mg/dL!`);
+            else if (latestBg > 180) triggerAlert(`IPERGLICEMIA: ${latestBg} mg/dL!`);
+            else silenceAlarm();
+
+            updateUI();
+            let oraAttuale = new Date();
+            document.getElementById('last-sync').innerText = `Sincronizzato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
+        }
+    } catch (err) {
+        document.getElementById('last-sync').innerText = "In attesa di xDrip+...";
+    }
+} catch (err) {
                 document.getElementById('last-sync').innerText = "Errore Connessione CareLink";
             }
         }
