@@ -4,439 +4,217 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DIG - Diabetes Intelligence Guide</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22DIG%22,%22short_name%22:%22DIG%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%230b132b%22,%22theme_color%22:%22%231c2541%22}">
+
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
     <style>
-        body {
-            background-color: #020617;
-            color: #f8fafc;
-            font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        *, *::before, *::after { box-sizing: border-box; }
+        body { 
+            font-family: 'Inter', sans-serif; 
+            background-color: #0b132b; 
+            color: #ffffff; 
+            margin: 0; 
+            padding: 0;
+            display: flex; 
+            flex-direction: column; 
+            height: 100vh; 
+            overflow: hidden;
         }
-        .tab-content { display: none; }
-        .tab-content.active { display: flex; flex-direction: column; flex-grow: 1; }
-        ::-webkit-scrollbar { width: 4px; }
-        ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.3); }
-        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+        .header { 
+            background-color: #1c2541; 
+            padding: 15px; 
+            text-align: center; 
+            font-weight: bold; 
+            border-bottom: 1px solid #3a506b;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header-title { flex: 1; text-align: center; font-size: 16px; letter-spacing: 1px; color: #00b4d8; }
+        .clear-btn {
+            background-color: transparent;
+            border: 1px solid #3a506b;
+            color: #ff4d4d;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .clear-btn:hover { background-color: #ff4d4d; color: #fff; }
+        .chat-container { 
+            flex: 1; 
+            padding: 20px; 
+            overflow-y: auto; 
+            display: flex; 
+            flex-direction: column; 
+            gap: 12px; 
+        }
+        .message { 
+            padding: 12px 16px; 
+            border-radius: 8px; 
+            max-width: 75%; 
+            line-height: 1.4; 
+            word-wrap: break-word;
+        }
+        .user-message { background-color: #00b4d8; align-self: flex-end; color: #000; font-weight: 500; }
+        .bot-message { background-color: #1c2541; align-self: flex-start; border: 1px solid #3a506b; }
+        .input-area { 
+            padding: 15px; 
+            background-color: #1c2541; 
+            display: flex; 
+            gap: 10px; 
+            border-top: 1px solid #3a506b; 
+        }
+        input { 
+            flex: 1; 
+            padding: 12px; 
+            border-radius: 6px; 
+            border: 1px solid #3a506b; 
+            background-color: #0b132b; 
+            color: #fff; 
+            outline: none; 
+            font-size: 14px;
+        }
+        button.send-btn { 
+            background-color: #00b4d8; 
+            color: #000; 
+            border: none; 
+            padding: 12px 20px; 
+            border-radius: 6px; 
+            font-weight: bold; 
+            cursor: pointer; 
+            font-size: 14px;
+        }
+        button.send-btn:hover { background-color: #0096c7; }
     </style>
 </head>
-<body class="flex flex-col min-h-screen p-4 max-w-md mx-auto">
+<body>
 
-    <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
-        <h1 class="text-2xl font-black text-emerald-400 tracking-wider">D.I.G.</h1>
-        <span id="last-sync" class="text-xs text-slate-500 font-mono">In attesa...</span>
+    <div class="header">
+        <div style="width: 70px;"></div> <div class="header-title">DIG ASSISTANT INTEL</div>
+        <button class="clear-btn" onclick="cancellaCronologia()">Svuota</button>
     </div>
-
-    <div id="tab-archive" class="tab-content justify-between">
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-[68vh]">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 pb-1 border-b border-slate-800">
-                Archivio Storico Glicemie
-            </h3>
-            <div id="archive-list" class="flex-grow overflow-y-auto space-y-4 pr-1">
-                <div class="text-slate-500 text-xs italic text-center py-4">Caricamento dati storici...</div>
-            </div>
-        </div>
-    </div>
-
-    <div id="tab-home" class="tab-content active justify-between">
-        <div class="flex justify-between items-center bg-slate-900/30 border border-slate-800/60 p-4 rounded-2xl">
-            <div class="text-left">
-                <div class="text-slate-500 text-[10px] uppercase tracking-widest font-bold">Glicemia</div>
-                <div class="flex items-baseline gap-1">
-                    <span id="bg-value" class="text-6xl font-black tracking-tighter text-slate-100">--</span>
-                    <span id="bg-trend" class="text-2xl text-emerald-400 font-bold">→</span>
-                </div>
-            </div>
-            
-            <div class="text-right border-l border-slate-800 pl-4">
-                <div class="text-slate-500 text-[10px] uppercase tracking-widest font-bold">TIR (24h)</div>
-                <div class="text-3xl font-black text-emerald-400 font-mono" id="tir-value">--%</div>
-                <span class="text-[9px] text-slate-500">Target: 70-180 mg/dL</span>
-            </div>
+    
+    <div class="chat-container" id="chat">
         </div>
 
-        <div id="alert-box" class="mt-3 p-2.5 rounded bg-red-950/50 border border-red-500 text-red-400 text-xs font-bold hidden animate-pulse text-center"></div>
-        <div id="predictive-alert-box" class="mt-2 p-2.5 rounded bg-yellow-950/40 border border-yellow-600 text-yellow-400 text-xs font-bold hidden text-center border-dashed"></div>
-
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 my-3 flex-grow flex flex-col justify-center min-h-[220px]">
-            <canvas id="bgChart"></canvas>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3 mb-2">
-            <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 text-center flex flex-col justify-between">
-                <div>
-                    <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Scadenza Sensore</span>
-                    <span id="sensor-timer" class="text-sm font-black text-emerald-400 font-mono block mt-1">--</span>
-                </div>
-                <button onclick="promptManualTimer('sensor')" class="text-[9px] text-slate-400 hover:text-slate-200 mt-2 bg-slate-950 border border-slate-800 py-1.5 rounded font-bold">Modifica</button>
-            </div>
-            <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 text-center flex flex-col justify-between">
-                <div>
-                    <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Scadenza Set</span>
-                    <span id="set-timer" class="text-sm font-black text-emerald-400 font-mono block mt-1">--</span>
-                </div>
-                <button onclick="promptManualTimer('set')" class="text-[9px] text-slate-400 hover:text-slate-200 mt-2 bg-slate-950 border border-slate-800 py-1.5 rounded font-bold">Modifica</button>
-            </div>
-        </div>
-    </div>
-
-    <div id="tab-chat" class="tab-content justify-between h-[68vh]">
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-full justify-between">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-1 flex items-center justify-between">
-                <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> DIG Assistant Intel</span>
-                <span id="voice-status" class="text-[9px] text-slate-500 normal-case font-mono">Vocale pronto</span>
-            </h3>
-            <div id="chat-messages" class="flex-grow overflow-y-auto space-y-2 mb-3 text-sm flex flex-col pr-1">
-                <div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">
-                    Ciao! Sono l'assistente DIG avanzato. Puoi scrivermi o toccare il microfono per parlare a voce. Chiedimi qualunque cosa!
-                </div>
-            </div>
-            <div class="flex gap-2 items-center">
-                <button id="mic-btn" onclick="toggleVoiceInput()" class="bg-slate-950 hover:bg-slate-800 border border-slate-800 p-2.5 rounded-lg text-slate-400 hover:text-emerald-400 transition-all">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
-                    </svg>
-                </button>
-                <input id="chat-input" type="text" placeholder="Chiedi a DIG..." class="flex-grow bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 text-slate-200">
-                <button onclick="sendMessage()" class="bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-sm">Invia</button>
-            </div>
-        </div>
-    </div>
-
-    <div class="flex justify-around border-t border-slate-800 pt-3 mt-auto bg-slate-950/80 p-2 rounded-xl">
-        <button onclick="switchTab('archive')" class="nav-btn text-slate-500 font-bold text-sm">Archivio</button>
-        <button onclick="switchTab('home')" class="nav-btn text-emerald-400 font-bold text-sm">Home</button>
-        <button onclick="switchTab('chat')" class="nav-btn text-slate-500 font-bold text-sm">Chat Assistant</button>
+    <div class="input-area">
+        <input type="text" id="userInput" placeholder="Chiedi a DIG..." onkeypress="if(event.key === 'Enter') sendMessage()">
+        <button class="send-btn" onclick="sendMessage()">Invia</button>
     </div>
 
     <script>
-        let bgHistory = [];
-        let chartInstance = null;
-        let recognition = null;
-        let isListening = false;
+        // Carica la cronologia salvata o inizia con un array vuoto
+        let cronologiaMessaggi = JSON.parse(localStorage.getItem('chat_dig')) || [];
 
-        // Inizializzazione Riconoscimento Vocale
-        if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            recognition = new SpeechRecognition();
-            recognition.lang = 'it-IT';
-            recognition.continuous = false;
-            recognition.interimResults = false;
-
-            recognition.onstart = () => {
-                isListening = true;
-                document.getElementById('mic-btn').classList.add('border-emerald-500', 'text-emerald-400', 'animate-pulse');
-                document.getElementById('voice-status').innerText = "Ascolto in corso...";
-            };
-
-            recognition.onend = () => {
-                isListening = false;
-                document.getElementById('mic-btn').classList.remove('border-emerald-500', 'text-emerald-400', 'animate-pulse');
-                document.getElementById('voice-status').innerText = "Vocale pronto";
-            };
-
-            recognition.onresult = (event) => {
-                const text = event.results[0][0].transcript;
-                document.getElementById('chat-input').value = text;
-                sendMessage();
-            };
-        }
-
-        function toggleVoiceInput() {
-            if (!recognition) { alert("Il comando vocale non è supportato su questo browser."); return; }
-            if (isListening) recognition.stop(); else recognition.start();
-        }
-
-        function speakText(text) {
-            if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'it-IT';
-                utterance.rate = 1.0;
-                window.speechSynthesis.speak(utterance);
-            }
-        }
-
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('text-emerald-400'));
-            document.querySelectorAll('.nav-btn').forEach(el => el.classList.add('text-slate-500'));
+        window.onload = function() {
+            const chatContainer = document.getElementById('chat');
             
-            document.getElementById('tab-' + tabName).classList.add('active');
-            event.target.classList.remove('text-slate-500');
-            event.target.classList.add('text-emerald-400');
-        }
-
-        async function fetchCareLinkData() {
-            document.getElementById('last-sync').innerText = "Sincronizzazione...";
-            try {
-                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=288');
-                const data = await response.json();
-                
-                if (data && data.length > 0) {
-                    bgHistory = data.map(item => {
-                        let date = new Date(item.date);
-                        let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
-                        let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-                        let trendWord = "FLAT";
-                        if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
-                        if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
-                        
-                        return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord, rawDate: date };
-                    }).reverse();
-
-                    localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
-                    
-                    checkRealtimeAndPredictiveAlerts();
-                    updateUI();
-                    
-                    let oraAttuale = new Date();
-                    document.getElementById('last-sync').innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
-                }
-            } catch (err) {
-                document.getElementById('last-sync').innerText = "In attesa di xDrip+...";
-            }
-        }
-
-        function checkRealtimeAndPredictiveAlerts() {
-            if (bgHistory.length < 4) return;
-            
-            const current = bgHistory[bgHistory.length - 1].value;
-            
-            if (current < 70) triggerAlert(`IMMEDIATO: IPOGLICEMIA REALE A ${current} mg/dL!`);
-            else if (current > 180) triggerAlert(`IMMEDIATO: IPERGLICEMIA REALE A ${current} mg/dL!`);
-            else silenceAlarm();
-
-            const p1 = bgHistory[bgHistory.length - 1].value;
-            const p4 = bgHistory[bgHistory.length - 4].value;
-            
-            const delta15min = p1 - p4;
-            const stimaProssimi15min = p1 + delta15min;
-
-            const predictiveBox = document.getElementById('predictive-alert-box');
-            
-            if (stimaProssimi15min < 70 && current >= 70) {
-                predictiveBox.innerText = `PREDISPOSIZIONE IPO: Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
-                predictiveBox.classList.remove('hidden');
-            } else if (stimaProssimi15min > 180 && current <= 180) {
-                predictiveBox.innerText = `PREDISPOSIZIONE IPER: Tendenza in rapida salita. Rischio iperglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
-                predictiveBox.classList.remove('hidden');
+            if (cronologiaMessaggi.length === 0) {
+                // Se la memoria è vuota, mostra il messaggio di benvenuto iniziale
+                appendMessage("Ciao! Sono DIG. Chiedimi pure qualsiasi cosa!", 'bot-message', false);
             } else {
-                predictiveBox.classList.add('hidden');
-            }
-        }
-
-        function updateUI() {
-            if (bgHistory.length === 0) return;
-
-            const current = bgHistory[bgHistory.length - 1];
-            document.getElementById('bg-value').innerText = current.value;
-            
-            let arrow = "→";
-            if (current.trend === "UP") arrow = "↑";
-            if (current.trend === "DOWN") arrow = "↓";
-            document.getElementById('bg-trend').innerText = arrow;
-
-            const inRange = bgHistory.filter(item => item.value >= 70 && item.value <= 180).length;
-            const tir = bgHistory.length > 0 ? Math.round((inRange / bgHistory.length) * 100) : 0;
-            const tirElement = document.getElementById('tir-value');
-            tirElement.innerText = `${tir}%`;
-            
-            if (tir >= 70) { tirElement.className = "text-3xl font-black text-emerald-400 font-mono"; }
-            else if (tir >= 50) { tirElement.className = "text-3xl font-black text-yellow-500 font-mono"; }
-            else { tirElement.className = "text-3xl font-black text-red-500 font-mono"; }
-
-            const archiveList = document.getElementById('archive-list');
-            archiveList.innerHTML = '';
-            const groupedData = {};
-            const archiveSorted = [...bgHistory].reverse();
-            
-            archiveSorted.forEach(item => {
-                let label = item.date;
-                const today = new Date();
-                const yesterday = new Date();
-                yesterday.setDate(today.getDate() - 1);
-                
-                const itemDateObj = new Date(item.rawDate);
-                if (itemDateObj.toDateString() === today.toDateString()) label = "Oggi";
-                else if (itemDateObj.toDateString() === yesterday.toDateString()) label = "Ieri";
-                else label = item.date.substring(0, 5);
-
-                if (!groupedData[label]) groupedData[label] = [];
-                groupedData[label].push(item);
-            });
-
-            for (const [giorno, letture] of Object.entries(groupedData)) {
-                let groupHTML = `
-                    <div class="bg-slate-950/40 border border-slate-800/50 rounded-lg p-3">
-                        <h4 class="text-xs font-bold text-emerald-400/90 mb-2 border-b border-slate-800 pb-1">${giorno}</h4>
-                        <div class="space-y-1.5 max-h-40 overflow-y-auto pr-1">
-                `;
-                letture.forEach(item => {
-                    let colorClass = "text-emerald-400";
-                    if (item.value < 70) colorClass = "text-red-400 font-bold";
-                    if (item.value > 180) colorClass = "text-yellow-500 font-bold";
-
-                    groupHTML += `
-                        <div class="flex justify-between items-center text-xs">
-                            <span class="text-slate-500">${item.time}</span>
-                            <span class="${colorClass}">${item.value} mg/dL</span>
-                        </div>
-                    `;
-                });
-                groupHTML += `</div></div>`;
-                archiveList.innerHTML += groupHTML;
-            }
-
-            const ctx = document.getElementById('bgChart').getContext('2d');
-            const recentHistory = bgHistory.slice(-24);
-            const labels = recentHistory.map(item => item.time);
-            const values = recentHistory.map(item => item.value);
-
-            if (chartInstance) {
-                chartInstance.data.labels = labels;
-                chartInstance.data.datasets[0].data = values;
-                chartInstance.update();
-            } else {
-                chartInstance = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: labels,
-                        datasets: [{
-                            label: 'Glicemia',
-                            data: values,
-                            borderColor: '#ffffff',
-                            borderWidth: 3,
-                            pointBackgroundColor: values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#10b981'),
-                            pointBorderColor: '#020617',
-                            pointBorderWidth: 1.5,
-                            pointRadius: 4.5,
-                            tension: 0.25,
-                            fill: false
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: { 
-                            legend: { display: false },
-                            tooltip: {
-                                enabled: true,
-                                backgroundColor: '#0f172a',
-                                bodyFont: { weight: 'bold', size: 13 },
-                                displayColors: false,
-                                callbacks: { label: (c) => `Glicemia: ${c.raw} mg/dL alle ${c.label}` }
-                            }
-                        },
-                        scales: {
-                            y: { min: 40, max: 250, grid: { color: 'rgba(30, 41, 59, 0.5)' }, ticks: { color: '#94a3b8', stepSize: 30 } },
-                            x: { grid: { display: false }, ticks: { color: '#94a3b8', maxTicksLimit: 6 } }
-                        }
-                    },
-                    plugins: [{
-                        id: 'chartLines',
-                        afterDraw: (chart) => {
-                            const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
-                            ctx.save(); ctx.beginPath(); ctx.setLineDash([5, 5]);
-                            ctx.strokeStyle = 'rgba(245, 158, 11, 0.45)'; ctx.moveTo(x.left, y.getPixelForValue(180)); ctx.lineTo(x.right, y.getPixelForValue(180)); ctx.stroke();
-                            ctx.strokeStyle = 'rgba(239, 68, 68, 0.45)'; ctx.moveTo(x.left, y.getPixelForValue(70)); ctx.lineTo(x.right, y.getPixelForValue(70)); ctx.stroke();
-                            ctx.restore();
-                        },
-                        beforeDraw: (chart) => {
-                            const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
-                            ctx.fillStyle = 'rgba(239, 68, 68, 0.04)'; ctx.fillRect(x.left, y.getPixelForValue(y.max), x.right - x.left, y.getPixelForValue(180) - y.getPixelForValue(y.max));
-                            ctx.fillStyle = 'rgba(16, 185, 129, 0.05)'; ctx.fillRect(x.left, y.getPixelForValue(180), x.right - x.left, y.getPixelForValue(70) - y.getPixelForValue(180));
-                            ctx.fillStyle = 'rgba(239, 68, 68, 0.07)'; ctx.fillRect(x.left, y.getPixelForValue(70), x.right - x.left, y.getPixelForValue(y.min) - y.getPixelForValue(70));
-                        }
-                    }]
+                // Altrimenti rigenera tutti i vecchi messaggi salvati dall'utente
+                cronologiaMessaggi.forEach(msg => {
+                    appendMessage(msg.text, msg.sender, false);
                 });
             }
-        }
+        };
 
-        function promptManualTimer(type) {
-            const inputGiorni = prompt(`Quanti GIORNI deve durare il nuovo timer?`, type === 'sensor' ? "10" : "3");
-            if (inputGiorni === null) return;
-            const giorni = parseFloat(inputGiorni);
-            if (isNaN(giorni) || giorni < 0) return;
-            const expirationTime = Date.now() + (giorni * 24 * 60 * 60 * 1000);
-            localStorage.setItem(`dig_expire_${type}`, expirationTime);
-            updateTimers();
-        }
-
-        function updateTimers() {
-            ['sensor', 'set'].forEach(type => {
-                const expire = localStorage.getItem(`dig_expire_${type}`);
-                if (!expire) { document.getElementById(`${type}-timer`).innerText = "Non impostato"; return; }
-                const diff = expire - Date.now();
-                if (diff <= 0) {
-                    document.getElementById(`${type}-timer`).innerText = "SCADUTO!";
-                    document.getElementById(`${type}-timer`).className = "text-sm font-black text-red-500 font-mono block mt-1 animate-pulse";
-                } else {
-                    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-                    const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
-                    const mins = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
-                    document.getElementById(`${type}-timer`).innerText = `${days}g ${hours}o ${mins}m`;
-                    document.getElementById(`${type}-timer`).className = diff < (24 * 60 * 60 * 1000) ? "text-sm font-black text-yellow-500 font-mono block mt-1" : "text-sm font-black text-emerald-400 font-mono block mt-1";
-                }
-            });
-        }
-
-        function triggerAlert(message) {
-            const box = document.getElementById('alert-box');
-            box.innerText = message; box.classList.remove('hidden');
-        }
-        function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
-
-        // Gestione messaggi inviati al Backend Vercel reale
         async function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const userText = input.value.trim();
-            if(!userText) return;
+            const input = document.getElementById('userInput');
+            const text = input.value.trim();
+            if (!text) return;
 
-            const chatContainer = document.getElementById('chat-messages');
-            chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${userText}</div>`;
+            // Mostra e salva il messaggio dell'utente
+            appendMessage(text, 'user-message', true);
             input.value = '';
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            const typingId = "typing-" + Date.now();
-            chatContainer.innerHTML += `<div id="${typingId}" class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-400 italic">DIG sta pensando...</div>`;
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
 
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: userText,
-                        currentBg: currentBg
-                    })
+                    body: JSON.stringify({ message: text })
                 });
-
                 const data = await response.json();
-                document.getElementById(typingId).remove();
-
-                if (data.reply) {
-                    chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${data.reply}</div>`;
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    speakText(data.reply);
-                } else {
-                    throw new Error();
-                }
-
-            } catch (err) {
-                document.getElementById(typingId).remove();
-                const errorReply = "Ops! Non sono riuscito a connettermi al mio server. Controlla di aver configurato correttamente Vercel e la chiave API.";
-                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-                speakText(errorReply);
+                
+                // Mostra e salva la risposta dell'assistente
+                appendMessage(data.reply, 'bot-message', true);
+                
+                // Fai parlare l'assistente con la voce maschile impostata
+                parla(data.reply);
+                
+            } catch (e) {
+                appendMessage("Errore di connessione con il server.", 'bot-message', false);
             }
         }
 
-        fetchCareLinkData();
-        setInterval(fetchCareLinkData, 60000);
-        updateTimers();
-        setInterval(updateTimers, 60000);
+        function appendMessage(text, className, salva = true) {
+            const chat = document.getElementById('chat');
+            const msg = document.createElement('div');
+            msg.className = `message ${className}`;
+            msg.innerText = text;
+            chat.appendChild(msg);
+            chat.scrollTop = chat.scrollHeight;
+
+            if (salva) {
+                cronologiaMessaggi.push({ text: text, sender: className });
+                localStorage.setItem('chat_dig', JSON.stringify(cronologiaMessaggi));
+            }
+        }
+
+        // Sistema di Sintesi Vocale Ottimizzato per Voce Maschile
+        function parla(testo) {
+            if ('speechSynthesis' in window) {
+                // Interrompe riproduzioni precedenti rimaste in coda
+                window.speechSynthesis.cancel();
+
+                const utterance = new SpeechSynthesisUtterance(testo);
+                utterance.lang = 'it-IT';
+                utterance.rate = 1.0;  // Velocità standard naturale
+                utterance.pitch = 0.85; // Abbassa il tono per rendere la voce più maschile
+
+                const voci = window.speechSynthesis.getVoices();
+                
+                // Algoritmo che cerca la migliore voce italiana ad alta fedeltà
+                const voceSelezionata = voci.find(v => {
+                    const name = v.name.toLowerCase();
+                    return v.lang.startsWith('it') && (
+                        name.includes('google') || 
+                        name.includes('microsoft') || 
+                        name.includes('male') || 
+                        name.includes('cosimo') || 
+                        name.includes('natural')
+                    );
+                }) || voci.find(v => v.lang.startsWith('it'));
+
+                if (voceSelezionata) {
+                    utterance.voice = voceSelezionata;
+                }
+
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = () => {};
+        }
+
+        // Funzione legata al pulsante in alto a destra per svuotare la memoria
+        function cancellaCronologia() {
+            if (confirm("Vuoi davvero svuotare la cronologia dei messaggi?")) {
+                localStorage.removeItem('chat_dig');
+                cronologiaMessaggi = [];
+                document.getElementById('chat').innerHTML = '';
+                appendMessage("Ciao! Sono DIG. Chiedimi pure qualsiasi cosa!", 'bot-message', false);
+            }
+        }
     </script>
 </body>
 </html>
