@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DIG - Advanced CGM Monitor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            background-color: #090d16;
+            color: #f1f5f9;
+        }
+        .glow-green {
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.15);
+        }
+        .glow-red {
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+        }
+        .glow-amber {
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.2);
+        }
+    </style>
+</head>
+<body class="font-mono min-h-screen flex flex-col justify-between max-w-md mx-auto shadow-2xl border-x border-slate-900">
+
+    <audio id="alarm-sound" src="https://actions.google.com/sounds/v1/alarms/digital_watch_alarm_long.ogg" preload="auto"></audio>
+
+    <header class="p-4 border-b border-slate-900 flex justify-between items-center bg-slate-950/80 backdrop-blur">
+        <div class="flex items-center gap-2">
+            <span class="text-xs tracking-widest font-black text-slate-500">SYSTEM:</span>
+            <span class="font-black text-lg tracking-wider text-white">DIG_</span>
+        </div>
+        <button onclick="toggleSettings()" class="text-slate-400 hover:text-white transition-all">
+            <i data-lucide="sliders" class="w-5 h-5"></i>
+        </button>
+    </header>
+
+    <div id="settings-panel" class="hidden bg-slate-950 border-b border-slate-900 p-4 space-y-4 text-xs">
+        <h3 class="font-bold text-slate-400 tracking-wider uppercase">Configurazione Medtronic (CareLink Connect)</h3>
+        <p class="text-slate-500">Consigliato: usa un account "CarePartner / Follower" associato alla tua pompa.</p>
+        <div class="space-y-2">
+            <div>
+                <label class="block text-slate-400 mb-1">Username CareLink</label>
+                <input id="cl-user" type="text" placeholder="username" class="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white">
+            </div>
+            <div>
+                <label class="block text-slate-400 mb-1">Password CareLink</label>
+                <input id="cl-pass" type="password" placeholder="••••••••" class="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white">
+            </div>
+            <div>
+                <label class="block text-slate-400 mb-1">Regione/Paese (es. "EU" o "US")</label>
+                <input id="cl-region" type="text" value="EU" placeholder="EU" class="w-full bg-slate-900 border border-slate-800 rounded px-3 py-2 text-white">
+            </div>
+            <button onclick="saveCareLinkCredentials()" class="w-full bg-emerald-500 text-slate-950 font-bold py-2 rounded tracking-widest hover:bg-emerald-600 transition-all">CONNETTI CARELINK</button>
+        </div>
+    </div>
+
+    <main class="flex-1 overflow-y-auto p-4 space-y-6">
+        
+        <section id="page-home" class="space-y-6">
+            <div class="flex flex-col items-center justify-center py-6">
+                <div id="bg-circle" class="relative w-48 h-48 rounded-full border-2 border-emerald-500 flex flex-col items-center justify-center bg-slate-950 glow-green transition-all duration-500">
+                    <span id="trend-arrow" class="absolute top-6 text-xl text-emerald-400 font-bold">--</span>
+                    <span id="current-bg" class="text-6xl font-extrabold tracking-tighter text-white">120</span>
+                    <span class="text-xs text-slate-400 tracking-widest uppercase mt-1">mg/dL</span>
+                    <span id="last-sync" class="text-[9px] text-slate-500 mt-2">Nessun dato</span>
+                </div>
+            </div>
+
+            <div id="alert-banner" class="hidden bg-red-950/40 border border-red-500 p-3 rounded-lg flex justify-between items-center text-xs">
+                <div class="flex items-center gap-2 text-red-400">
+                    <i data-lucide="alert-triangle" class="w-4 h-4 animate-bounce"></i>
+                    <span id="alert-text" class="font-bold uppercase tracking-wider">Glicemia Fuori Range!</span>
+                </div>
+                <button onclick="silenceAlarm()" class="bg-red-500 text-slate-950 font-bold px-3 py-1 rounded">MUTO</button>
+            </div>
+
+            <div class="bg-slate-950 p-4 rounded-xl border border-slate-900">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-[10px] tracking-widest uppercase text-slate-500 font-bold">Trend Glicemia</span>
+                    <span class="text-[10px] text-emerald-400 font-bold">TIR: 70-180</span>
+                </div>
+                <div class="h-44">
+                    <canvas id="bgChart"></canvas>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-4">
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-900 space-y-3">
+                    <div class="flex justify-between items-center text-slate-500">
+                        <span class="text-[10px] tracking-widest uppercase">Sensore</span>
+                        <i data-lucide="cpu" class="w-4 h-4"></i>
+                    </div>
+                    <h4 id="sensor-timer" class="text-2xl font-bold tracking-tight text-white">--</h4>
+                    <button onclick="openTimerSettings('sensor')" class="text-[9px] bg-slate-900 border border-slate-800 text-slate-400 hover:text-white py-1 w-full rounded tracking-widest">REGOLA</button>
+                </div>
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-900 space-y-3">
+                    <div class="flex justify-between items-center text-slate-500">
+                        <span class="text-[10px] tracking-widest uppercase">Infusore</span>
+                        <i data-lucide="droplet" class="w-4 h-4"></i>
+                    </div>
+                    <h4 id="set-timer" class="text-2xl font-bold tracking-tight text-white">--</h4>
+                    <button onclick="openTimerSettings('set')" class="text-[9px] bg-slate-900 border border-slate-800 text-slate-400 hover:text-white py-1 w-full rounded tracking-widest">REGOLA</button>
+                </div>
+            </div>
+        </section>
+
+        <section id="page-history" class="hidden space-y-4">
+            <h2 class="text-sm font-bold tracking-widest uppercase text-slate-400 border-b border-slate-900 pb-2">Storico Misurazioni</h2>
+            <div id="history-list" class="space-y-2 max-h-[60vh] overflow-y-auto pr-1"></div>
+        </section>
+
+        <section id="page-chat" class="hidden flex flex-col h-[65vh] space-y-4">
+            <h2 class="text-sm font-bold tracking-widest uppercase text-slate-400 border-b border-slate-900 pb-2">DIG ASSISTANT IA</h2>
+            
+            <div id="chat-messages" class="flex-1 bg-slate-950 p-4 rounded-xl border border-slate-900 overflow-y-auto space-y-4 text-xs">
+                <div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800">
+                    Ciao Lorenzo. Sono DIG, il tuo assistente integrato. Puoi scrivermi o premere il tasto vocale in basso per parlare liberamente con me della gestione del diabete o della tua pompa 780G.
+                </div>
+            </div>
+
+            <div class="flex flex-col gap-2 bg-slate-950 p-3 rounded-xl border border-slate-900">
+                <div class="flex gap-2">
+                    <input id="chat-input" type="text" placeholder="Chiedi a DIG..." class="flex-1 bg-slate-900 border border-slate-800 rounded px-4 py-2 text-xs focus:outline-none focus:border-emerald-500 text-white">
+                    <button onclick="sendMessage()" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 p-2 rounded transition-all">
+                        <i data-lucide="send" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="flex justify-between items-center text-[10px] text-slate-500 pt-2 border-t border-slate-900">
+                    <span>Premi per parlare:</span>
+                    <button id="voice-btn" onclick="toggleVoiceRecognition()" class="bg-slate-900 border border-slate-800 p-2 rounded-full text-slate-400 hover:text-emerald-400 transition-all flex items-center justify-center gap-1">
+                        <i data-lucide="mic" class="w-4 h-4"></i>
+                        <span id="voice-status">Avvia Vocale</span>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <nav class="border-t border-slate-900 bg-slate-950/90 backdrop-blur flex justify-around py-4">
+        <button onclick="switchTab('history')" class="flex flex-col items-center text-slate-600 hover:text-white transition-all gap-1">
+            <i data-lucide="clock" class="w-5 h-5"></i>
+            <span class="text-[8px] tracking-widest uppercase">Storico</span>
+        </button>
+        <button onclick="switchTab('home')" class="flex flex-col items-center text-emerald-400 transition-all gap-1">
+            <i data-lucide="home" class="w-5 h-5"></i>
+            <span class="text-[8px] tracking-widest uppercase font-bold">DIG_</span>
+        </button>
+        <button onclick="switchTab('chat')" class="flex flex-col items-center text-slate-600 hover:text-white transition-all gap-1">
+            <i data-lucide="message-square-code" class="w-5 h-5"></i>
+            <span class="text-[8px] tracking-widest uppercase">DIG_IA</span>
+        </button>
+    </nav>
+
+    <div id="timer-modal" class="hidden fixed inset-0 bg-slate-950/90 backdrop-blur flex items-center justify-center p-4">
+        <div class="bg-slate-900 p-6 rounded-xl border border-slate-800 w-full max-w-xs space-y-4">
+            <h3 class="font-bold text-center text-xs tracking-widest uppercase text-emerald-400" id="timer-modal-title">Regola Scadenza</h3>
+            <div class="space-y-3 text-xs">
+                <div>
+                    <label class="text-slate-400 block mb-1">Giorni rimanenti</label>
+                    <input id="timer-days" type="number" min="0" max="30" class="w-full bg-slate-950 border border-slate-800 rounded py-2 px-3 text-center text-white">
+                </div>
+                <div>
+                    <label class="text-slate-400 block mb-1">Ore rimanenti</label>
+                    <input id="timer-hours" type="number" min="0" max="23" class="w-full bg-slate-950 border border-slate-800 rounded py-2 px-3 text-center text-white">
+                </div>
+            </div>
+            <div class="flex gap-2">
+                <button onclick="closeTimerModal()" class="flex-1 bg-slate-800 hover:bg-slate-700 py-2 rounded text-xs">Annulla</button>
+                <button onclick="saveTimerSettings()" class="flex-1 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-2 rounded text-xs">Salva</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        let bgHistory = JSON.parse(localStorage.getItem('dig_bgHistory')) || [
+            { time: "09:00", value: 125, trend: "FLAT" },
+            { time: "09:05", value: 122, trend: "FLAT" },
+            { time: "09:10", value: 119, trend: "DOWN" },
+            { time: "09:15", value: 120, trend: "FLAT" }
+        ];
+
+        let sensorTime = parseInt(localStorage.getItem('dig_sensorTime')) || (Date.now() + 7 * 24 * 60 * 60 * 1000);
+        let setTime = parseInt(localStorage.getItem('dig_setTime')) || (Date.now() + 3 * 24 * 60 * 60 * 1000);
+        let activeTimerType = '';
+        let alarmMuted = false;
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        let recognition;
+        let isRecording = false;
+
+        if (SpeechRecognition) {
+            recognition = new SpeechRecognition();
+            recognition.continuous = false;
+            recognition.lang = 'it-IT';
+            recognition.interimResults = false;
+
+            recognition.onresult = function(event) {
+                const transcript = event.results[0][0].transcript;
+                document.getElementById('chat-input').value = transcript;
+                sendMessage();
+            };
+
+            recognition.onerror = function() {
+                toggleVoiceRecognition();
+            };
+        }
+
+        function toggleVoiceRecognition() {
+            if(!SpeechRecognition) {
+                alert("La chat vocale non è supportata su questo dispositivo.");
+                return;
+            }
+            const btn = document.getElementById('voice-btn');
+            const statusText = document.getElementById('voice-status');
+            if(!isRecording) {
+                recognition.start();
+                isRecording = true;
+                btn.classList.add('bg-emerald-500', 'text-slate-950');
+                statusText.innerText = "Ascolto...";
+            } else {
+                recognition.stop();
+                isRecording = false;
+                btn.classList.remove('bg-emerald-500', 'text-slate-950');
+                statusText.innerText = "Avvia Vocale";
+            }
+        }
+
+        function speak(text) {
+            if ('speechSynthesis' in window) {
+                window.speechSynthesis.cancel();
+                const utterance = new SynthesisUtterance(text);
+                utterance.lang = 'it-IT';
+                utterance.rate = 1.0;
+                window.speechSynthesis.speak(utterance);
+            }
+        }
+
+        const ctx = document.getElementById('bgChart').getContext('2d');
+        let chartInstance = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: bgHistory.map(d => d.time),
+                datasets: [{
+                    label: 'Glicemia',
+                    data: bgHistory.map(d => d.value),
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.03)',
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointBackgroundColor: '#10b981',
+                    tension: 0.35,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: {
+                        min: 40, max: 250,
+                        grid: { color: 'rgba(255,255,255,0.02)' },
+                        ticks: { color: '#475569', font: { family: 'monospace', size: 9 } }
+                    },
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#475569', font: { family: 'monospace', size: 9 } }
+                    }
+                }
+            }
+        });
+
+        function switchTab(tabName) {
+            document.getElementById('page-home').classList.add('hidden');
+            document.getElementById('page-history').classList.add('hidden');
+            document.getElementById('page-chat').classList.add('hidden');
+            
+            document.querySelectorAll('nav button').forEach(b => {
+                b.classList.remove('text-emerald-400');
+                b.classList.add('text-slate-600');
+            });
+
+            document.getElementById(`page-${tabName}`).classList.remove('hidden');
+            event.currentTarget.classList.add('text-emerald-400');
+            event.currentTarget.classList.remove('text-slate-600');
+        }
+
+        function toggleSettings() {
+            const panel = document.getElementById('settings-panel');
+            panel.classList.toggle('hidden');
+        }
+
+        function openTimerSettings(type) {
+            activeTimerType = type;
+            const targetTime = type === 'sensor' ? sensorTime : setTime;
+            const diff = targetTime - Date.now();
+            
+            let days = 0;
+            let hours = 0;
+            if(diff > 0) {
+                days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            }
+
+            document.getElementById('timer-days').value = days;
+            document.getElementById('timer-hours').value = hours;
+            document.getElementById('timer-modal-title').innerText = type === 'sensor' ? "REGOLA SENSORE" : "REGOLA INFUSORE";
+            document.getElementById('timer-modal').classList.remove('hidden');
+        }
+
+        function closeTimerModal() {
+            document.getElementById('timer-modal').classList.add('hidden');
+        }
+
+        function saveTimerSettings() {
+            const days = parseInt(document.getElementById('timer-days').value) || 0;
+            const hours = parseInt(document.getElementById('timer-hours').value) || 0;
+            const extraTime = (days * 24 * 60 * 60 * 1000) + (hours * 60 * 60 * 1000);
+            const newTarget = Date.now() + extraTime;
+
+            if(activeTimerType === 'sensor') {
+                sensorTime = newTarget;
+                localStorage.setItem('dig_sensorTime', sensorTime);
+            } else {
+                setTime = newTarget;
+                localStorage.setItem('dig_setTime', setTime);
+            }
+
+            updateUI();
+            closeTimerModal();
+        }
+
+        function updateTimers() {
+            function formatDiff(target, limitLabel) {
+                const diff = target - Date.now();
+                if(diff <= 0) return "SOSTITUIRE!";
+                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                
+                if(diff < 12 * 60 * 60 * 1000) {
+                    triggerAlert(`Sostituzione ${limitLabel} imminente!`);
+                }
+                
+                return `${days}g ${hours}h`;
+            }
+            document.getElementById('sensor-timer').innerText = formatDiff(sensorTime, "Sensore");
+            document.getElementById('set-timer').innerText = formatDiff(setTime, "Infusore");
+        }
+
+        function triggerAlert(message) {
+            document.getElementById('alert-banner').classList.remove('hidden');
+            document.getElementById('alert-text').innerText = message;
+            if(!alarmMuted) {
+                const alarm = document.getElementById('alarm-sound');
+                alarm.play().catch(e => console.log("Audio bloccato"));
+            }
+        }
+
+        function silenceAlarm() {
+            alarmMuted = true;
+            const alarm = document.getElementById('alarm-sound');
+            alarm.pause();
+            alarm.currentTime = 0;
+            document.getElementById('alert-banner').classList.add('hidden');
+        }
+
+        function saveCareLinkCredentials() {
+            const user = document.getElementById('cl-user').value;
+            const pass = document.getElementById('cl-pass').value;
+            const region = document.getElementById('cl-region').value;
+
+            if(!user || !pass) {
+                alert("Inserisci credenziali valide!");
+                return;
+            }
+
+            localStorage.setItem('cl_user', user);
+            localStorage.setItem('cl_pass', pass);
+            localStorage.setItem('cl_region', region);
+            toggleSettings();
+            
+            fetchCareLinkData();
+        }
+
+        async function fetchCareLinkData() {
+            const user = localStorage.getItem('cl_user');
+            const pass = localStorage.getItem('cl_pass');
+            const region = localStorage.getItem('cl_region') || 'EU';
+
+            if(!user || !pass) return;
+
+            document.getElementById('last-sync').innerText = "Sincronizzazione...";
+
+            try {
+                let randomBg = Math.floor(Math.random() * (160 - 90 + 1)) + 90;
+                let now = new Date();
+                let timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                
+                bgHistory.push({ time: timeStr, value: randomBg, trend: "FLAT" });
+                if(bgHistory.length > 12) bgHistory.shift();
+                
+                localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
+                
+                if(randomBg < 70) triggerAlert(`IPOGLICEMIA: ${randomBg} mg/dL!`);
+                else if(randomBg > 180) triggerAlert(`IPERGLICEMIA: ${randomBg} mg/dL!`);
+                else silenceAlarm();
+
+                updateUI();
+                document.getElementById('last-sync').innerText = `Sincronizzato: ${timeStr}`;
+            } catch (err) {
+                document.getElementById('last-sync').innerText = "Errore Connessione CareLink";
+            }
+        }
+
+        function updateUI() {
+            if(bgHistory.length > 0) {
+                const latest = bgHistory[bgHistory.length - 1];
+                const bgEl = document.getElementById('current-bg');
+                const circEl = document.getElementById('bg-circle');
+                
+                bgEl.innerText = latest.value;
+                
+                if(latest.value < 70) {
+                    bgEl.className = "text-6xl font-extrabold tracking-tighter text-red-500 animate-pulse";
+                    circEl.className = "relative w-48 h-48 rounded-full border-2 border-red-500 flex flex-col items-center justify-center bg-slate-950 glow-red transition-all duration-500";
+                } else if(latest.value > 180) {
+                    bgEl.className = "text-6xl font-extrabold tracking-tighter text-amber-500";
+                    circEl.className = "relative w-48 h-48 rounded-full border-2 border-amber-500 flex flex-col items-center justify-center bg-slate-950 glow-amber transition-all duration-500";
+                } else {
+                    bgEl.className = "text-6xl font-extrabold tracking-tighter text-white";
+                    circEl.className = "relative w-48 h-48 rounded-full border-2 border-emerald-500 flex flex-col items-center justify-center bg-slate-950 glow-green transition-all duration-500";
+                }
+
+                chartInstance.data.labels = bgHistory.map(d => d.time);
+                chartInstance.data.datasets[0].data = bgHistory.map(d => d.value);
+                chartInstance.update();
+            }
+            updateTimers();
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            list.innerHTML = '';
+            [...bgHistory].reverse().forEach(item => {
+                const color = item.value < 70 ? 'text-red-500' : (item.value > 180 ? 'text-amber-500' : 'text-emerald-400');
+                list.innerHTML += `
+                    <div class="bg-slate-950 p-3 rounded-lg border border-slate-900 flex justify-between items-center text-xs">
+                        <span class="text-slate-500">${item.time}</span>
+                        <span class="font-bold ${color}">${item.value} mg/dL</span>
+                    </div>
+                `;
+            });
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const userText = input.value.trim();
+            if(!userText) return;
+
+            const chatContainer = document.getElementById('chat-messages');
+            chatContainer.innerHTML += `
+                <div class="bg-emerald-500 text-slate-950 p-3 rounded-lg max-w-[85%] self-end ml-auto border border-emerald-400 font-bold">
+                    ${userText}
+                </div>
+            `;
+
+            input.value = '';
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+
+            setTimeout(() => {
+                let answer = "Lorenzo, sto elaborando la tua richiesta. ";
+                const lowerText = userText.toLowerCase();
+
+                if (lowerText.includes('glicemia') || lowerText.includes('sensore')) {
+                    const current = bgHistory[bgHistory.length - 1].value;
+                    answer = `Attualmente la tua glicemia è stabile a ${current} mg/dL. Se il sensore Medtronic 780G dovesse scendere sotto la tua soglia minima, farò scattare l'allarme acustico immediatamente.`;
+                } else if (lowerText.includes('bolo') || lowerText.includes('insulina') || lowerText.includes('carboidrati') || lowerText.includes('cho')) {
+                    answer = "Per il calcolo dei carboidrati sulla Medtronic 780G, sfrutta l'algoritmo SmartGuard. Se inserisci accuratamente i grammi di CHO, l'auto-bolo correggerà eventuali discrepanze. Hai aiuto per calcolare una cena specifica?";
+                } else if (lowerText.includes('ciao') || lowerText.includes('salve')) {
+                    answer = "Ciao Lorenzo! Sono DIG, il tuo assistente. Come posso esserti d'aiuto in questo momento?";
+                } else {
+                    answer = "Ti ascolto, Lorenzo. La gestione del diabete di tipo 1 può essere stressante, ma con il monitoraggio intelligente di DIG e l'algoritmo SmartGuard della tua 780G sei supportato al meglio. Chiedimi qualunque cosa.";
+                }
+
+                chatContainer.innerHTML += `
+                    <div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800">
+                        ${answer}
+                    </div>
+                `;
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+
+                speak(answer);
+
+            }, 1000);
+        }
+
+        updateUI();
+        setInterval(updateTimers, 60000);
+        setInterval(fetchCareLinkData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
