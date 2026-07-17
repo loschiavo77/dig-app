@@ -1,46 +1,31 @@
 export default async function handler(req, res) {
-    // Permetti solo richieste POST
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Metodo non consentito' });
     }
 
     const { message, currentBg } = req.body;
-    const apiKey = process.env.GEMINI_API_KEY;
+    const msg = message.toLowerCase();
+    let reply = "";
 
-    if (!apiKey) {
-        return res.status(500).json({ error: 'Il server non ha ancora la chiave API configurata.' });
+    // Il "cervello locale" dell'assistente DIG
+    if (msg.includes("ciao") || msg.includes("salva")) {
+        reply = `Ciao! Sono il tuo assistente DIG. La tua glicemia attuale è di ${currentBg} mg/dL. Come posso aiutarti oggi?`;
+    } else if (msg.includes("glicemia") || msg.includes("valore") || msg.includes("sto")) {
+        const bg = parseInt(currentBg);
+        if (isNaN(bg)) {
+            reply = "Al momento non ho ricevuto letture valide da xDrip+. Controlla che l'app sia avviata sul telefono!";
+        } else if (bg < 70) {
+            reply = `La tua glicemia è bassa (${bg} mg/dL). Ricordati di assumere carboidrati a rapido assorbimento e avvisa un adulto se non ti senti bene!`;
+        } else if (bg > 180) {
+            reply = `La tua glicemia è alta (${bg} mg/dL). Controlla se è il caso di fare una correzione o di bere dell'acqua, e parlane con un adulto.`;
+        } else {
+            reply = `La tua glicemia è di ${currentBg} mg/dL, sei perfettamente all'interno del tuo target! Ottimo lavoro, continua così.`;
+        }
+    } else if (msg.includes("grazie")) {
+        reply = "Di nulla! Sono sempre qui a disposizione per darti una mano con i dati del sensore.";
+    } else {
+        reply = `Ho ricevuto il tuo messaggio! Ti ricordo che la tua glicemia attuale è ${currentBg} mg/dL. Se hai dubbi sulla terapia o sui valori, confrontati sempre con un adulto o con il tuo medico.`;
     }
 
-    try {
-        // Prompt di sistema che istruisce l'IA su chi è e qual è la tua glicemia attuale
-        const systemPrompt = `Tu sei DIG (Diabetes Intelligence Guide), un assistente virtuale empatico, intelligente e ironico.
-La glicemia attuale dell'utente letta in tempo reale da xDrip+ è: ${currentBg || 'Non disponibile'} mg/dL.
-
-Istruzioni per le risposte:
-1. Puoi rispondere a QUALSIASI domanda ti venga posta, anche totalmente fuori dal tema del diabete (scienza, compiti, curiosità, programmazione, barzellette, ecc.).
-2. Se l'utente ti fa domande sul diabete, sulla sua glicemia attuale o ti chiede consigli pratici, offri risposte utili e scientificamente fondate, ma inserisci SEMPRE un piccolo promemoria sul fatto che sei un'IA e che le decisioni finali sulla terapia vanno discusse con un medico o un adulto.
-3. Mantieni le risposte coincise, amichevoli, scansionabili e facili da leggere sul telefono.`;
-
-        // Chiamata diretta alle API di Gemini
-        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        role: 'user',
-                        parts: [{ text: `${systemPrompt}\n\nDomanda dell'utente: ${message}` }]
-                    }
-                ]
-            })
-        });
-
-        const data = await response.json();
-        const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || "Scusami, ho avuto un piccolo vuoto di memoria. Puoi riprovare?";
-
-        return res.status(200).json({ reply: replyText });
-
-    } catch (error) {
-        return res.status(500).json({ error: 'Errore di connessione con il cervello dell\'IA.' });
-    }
+    return res.status(200).json({ reply: reply });
 }
