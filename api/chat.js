@@ -3,7 +3,7 @@ export default async function handler(req, res) {
         return res.status(405).json({ error: 'Metodo non consentito' });
     }
 
-    const { message, currentBg } = req.body;
+    const { message } = req.body;
     const apiKey = process.env.COHERE_API_KEY;
 
     if (!apiKey) {
@@ -19,7 +19,7 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify({
                 message: message,
-                preamble: `Sei DIG, un assistente amichevole per la gestione della glicemia. Il valore attuale dell'utente è ${currentBg || 'non pervenuto'} mg/dL. Rispondi in modo chiaro, empatico e molto breve.`,
+                preamble: "Sei DIG, un assistente virtuale tuttofare, amichevole e intelligente. Rispondi in modo chiaro, utile e conciso a qualsiasi domanda dell'utente, senza limitarti a un solo argomento.",
                 model: 'command-r-08-2024'
             })
         });
