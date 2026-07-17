@@ -19,13 +19,12 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify({
                 message: message,
-                preamble: `Sei DIG, un assistente amichevole per la gestione della glicemia. Il valore attuale dell'utente è ${currentBg || 'non pervenuto'} mg/dL. Rispondi in modo chiaro, empatico e breve.`,
-                model: 'command'
+                preamble: `Sei DIG, un assistente amichevole per la gestione della glicemia. Il valore attuale dell'utente è ${currentBg || 'non pervenuto'} mg/dL. Rispondi in modo chiaro, empatico e molto breve.`,
+                model: 'command-r-08-2024'
             })
         });
 
         const data = await response.json();
-        
         const replyText = data.text || (data.generations && data.generations[0] && data.generations[0].text) || data.response || null;
 
         if (replyText) {
