@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -477,12 +478,30 @@
 
             let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
 
+            // CREAZIONE DELLA CRONOLOGIA COMPLETA DA INVIARE AL SERVER
+            // Mappiamo i messaggi salvati per renderli compatibili con l'API e aggiungiamo le istruzioni stabili in cima
+            const istruzioniComportamento = {
+                role: "system",
+                content: "Tu sei DIG, un assistente intelligenza guida per il diabete. Sii estremamente sintetico, preciso e rispondi in pochissime battute prendendo spunto dai messaggi passati della chat se utili. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'."
+            };
+
+            const messaggiPerServer = savedChat.map(msg => {
+                return {
+                    role: msg.type === 'user' ? 'user' : 'assistant',
+                    content: msg.text
+                };
+            });
+
+            // Uniamo le regole fisse del sistema con la cronologia dei messaggi scambiati
+            const chatHistoryCompleta = [istruzioniComportamento, ...messaggiPerServer];
+
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         message: userText,
+                        history: chatHistoryCompleta, // Inviamo tutta la memoria storica strutturata!
                         currentBg: currentBg
                     })
                 });
