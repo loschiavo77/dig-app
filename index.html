@@ -4,12 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DIG - Diabetes Intelligence Guide</title>
-    
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="mobile-web-app-capable" content="yes">
-    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22DIG%22,%22short_name%22:%22DIG%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23020617%22,%22theme_color%22:%22%23020617%22}">
-
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
@@ -89,13 +83,13 @@
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-full justify-between">
             <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-1 flex items-center justify-between">
                 <span class="flex items-center gap-1"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span> DIG Assistant Intel</span>
-                <div class="flex items-center gap-2">
-                    <button onclick="clearChatMemory()" class="text-[9px] text-red-400 font-mono underline opacity-50 hover:opacity-100">Svuota</button>
-                    <span id="voice-status" class="text-[9px] text-slate-500 normal-case font-mono">Vocale pronto</span>
-                </div>
+                <span id="voice-status" class="text-[9px] text-slate-500 normal-case font-mono">Vocale pronto</span>
             </h3>
             <div id="chat-messages" class="flex-grow overflow-y-auto space-y-2 mb-3 text-sm flex flex-col pr-1">
+                <div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">
+                    Ciao! Sono l'assistente DIG avanzato. Puoi scrivermi o toccare il microfono per parlare a voce. Chiedimi qualunque cosa!
                 </div>
+            </div>
             <div class="flex gap-2 items-center">
                 <button id="mic-btn" onclick="toggleVoiceInput()" class="bg-slate-950 hover:bg-slate-800 border border-slate-800 p-2.5 rounded-lg text-slate-400 hover:text-emerald-400 transition-all">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-5 h-5">
@@ -119,9 +113,6 @@
         let chartInstance = null;
         let recognition = null;
         let isListening = false;
-
-        // INIZIALIZZAZIONE MEMORIA DI CHAT
-        let savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
 
         // Inizializzazione Riconoscimento Vocale
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -155,37 +146,14 @@
             if (isListening) recognition.stop(); else recognition.start();
         }
 
-        // FUNZIONE SINTESI VOCALE CON FILTRO VOCE MASCHILE NON ROBOTICA
         function speakText(text) {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel();
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.lang = 'it-IT';
-                utterance.rate = 1.0; 
-                utterance.pitch = 0.88; // Rende il timbro leggermente più profondo e maschile
-
-                const voices = window.speechSynthesis.getVoices();
-                // Seleziona la migliore voce maschile o naturale disponibile sul sistema operativo
-                const selectedVoice = voices.find(v => {
-                    const name = v.name.toLowerCase();
-                    return v.lang.startsWith('it') && (
-                        name.includes('google') || 
-                        name.includes('microsoft') || 
-                        name.includes('male') || 
-                        name.includes('cosimo') || 
-                        name.includes('natural')
-                    );
-                }) || voices.find(v => v.lang.startsWith('it'));
-
-                if (selectedVoice) {
-                    utterance.voice = selectedVoice;
-                }
+                utterance.rate = 1.0;
                 window.speechSynthesis.speak(utterance);
             }
-        }
-
-        if ('speechSynthesis' in window) {
-            window.speechSynthesis.onvoiceschanged = () => {};
         }
 
         function switchTab(tabName) {
@@ -418,35 +386,7 @@
         }
         function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
-        // GENERATORE DELLA CRONOLOGIA DEI MESSAGGI SALVATI ALL'AVVIO
-        function renderSavedChat() {
-            const chatContainer = document.getElementById('chat-messages');
-            chatContainer.innerHTML = '';
-            if(savedChat.length === 0) {
-                chatContainer.innerHTML = `<div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">Ciao! Sono l'assistente DIG avanzato. Puoi scrivermi o toccare il microfono per parlare a voce. Chiedimi qualunque cosa!</div>`;
-            } else {
-                savedChat.forEach(msg => {
-                    if (msg.type === 'user') {
-                        chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${msg.text}</div>`;
-                    } else if (msg.type === 'bot') {
-                        chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${msg.text}</div>`;
-                    } else if (msg.type === 'error') {
-                        chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${msg.text}</div>`;
-                    }
-                });
-            }
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        }
-
-        function clearChatMemory() {
-            if(confirm("Vuoi cancellare la cronologia dei messaggi della chat?")) {
-                localStorage.removeItem('dig_chat_history');
-                savedChat = [];
-                renderSavedChat();
-            }
-        }
-
-        // Gestione messaggi inviati al Backend Vercel reale con salvataggio in memoria
+        // Gestione messaggi inviati al Backend Vercel reale
         async function sendMessage() {
             const input = document.getElementById('chat-input');
             const userText = input.value.trim();
@@ -454,11 +394,6 @@
 
             const chatContainer = document.getElementById('chat-messages');
             chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${userText}</div>`;
-            
-            // Salva messaggio utente
-            savedChat.push({ type: 'user', text: userText });
-            localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
-            
             input.value = '';
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
@@ -483,11 +418,6 @@
 
                 if (data.reply) {
                     chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${data.reply}</div>`;
-                    
-                    // Salva messaggio bot
-                    savedChat.push({ type: 'bot', text: data.reply });
-                    localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
-                    
                     chatContainer.scrollTop = chatContainer.scrollHeight;
                     speakText(data.reply);
                 } else {
@@ -495,21 +425,14 @@
                 }
 
             } catch (err) {
-                if(document.getElementById(typingId)) document.getElementById(typingId).remove();
+                document.getElementById(typingId).remove();
                 const errorReply = "Ops! Non sono riuscito a connettermi al mio server. Controlla di aver configurato correttamente Vercel e la chiave API.";
                 chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
-                
-                // Salva errore
-                savedChat.push({ type: 'error', text: errorReply });
-                localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
-                
                 chatContainer.scrollTop = chatContainer.scrollHeight;
                 speakText(errorReply);
             }
         }
 
-        // Esecuzione all'avvio
-        renderSavedChat();
         fetchCareLinkData();
         setInterval(fetchCareLinkData, 60000);
         updateTimers();
