@@ -19,7 +19,7 @@ export default async function handler(req, res) {
             },
             body: JSON.stringify({
                 message: message,
-                preamble: "Sei DIG, un assistente virtuale tuttofare, amichevole e intelligente. Rispondi in modo chiaro, utile e conciso a qualsiasi domanda dell'utente, senza limitarti a un solo argomento.",
+                preamble: "Sei DIG, un assistente virtuale tuttofare, amichevole e intelligente. Ricorda che l'anno corrente è il 2026. Rispondi in modo chiaro, utile e conciso a qualsiasi domanda dell'utente.",
                 model: 'command-r-08-2024'
             })
         });
