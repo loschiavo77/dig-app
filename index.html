@@ -8,7 +8,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="mobile-web-app-capable" content="yes">
-    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22DIG%22,%22short_name%22:%22DIG%22,%22start_url%22:%22.%22,%22display%22:%22standalone%22,%22background_color%22:%22%23020617%22,%22theme_color%22:%22%23020617%22}">
+    <link rel="manifest" href="data:application/manifest+json,{%22name%22:%22DIG%22,%22short_name%22:%22DIG%22,%22start_url%22:%22/%22,%22id%22:%22/%22,%22display%22:%22standalone%22,%22background_color%22:%22%23020617%22,%22theme_color%22:%22%23020617%22}">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -524,6 +524,26 @@
         setInterval(fetchCareLinkData, 60000);
         updateTimers();
         setInterval(updateTimers, 60000);
+
+        // REGISTRAZIONE DEL SERVICE WORKER INLINE (Per abilitare l'installazione PWA)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                const swCode = `
+                    self.addEventListener('install', (e) => self.skipWaiting());
+                    self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+                    self.addEventListener('fetch', (e) => {
+                        // Pass-through nativo per far funzionare le chiamate esterne
+                        e.respondWith(fetch(e.request).catch(() => new Response("Offline")));
+                    });
+                `;
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                const swUrl = URL.createObjectURL(blob);
+                
+                navigator.serviceWorker.register(swUrl, { scope: '/' })
+                    .then(() => console.log('PWA Service Worker attivato con successo.'))
+                    .catch(err => console.error('Errore Service Worker:', err));
+            });
+        }
     </script>
 </body>
 </html>
