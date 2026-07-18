@@ -125,6 +125,7 @@
         
         let isAudioEnabled = false;
         let savedChat = [];
+        let hasUserScrolled = false; // Flag per evitare di resettare la posizione dello scroll se l'utente sta navigando indietro
 
         try {
             savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
@@ -208,12 +209,13 @@
                 window.event.target.classList.add('text-emerald-400');
             }
 
-            // Ripristina la vista all'estrema destra se si torna in Home
+            // Quando si torna sulla Home, reimposta la vista focalizzata sull'ora corrente (tutto a destra)
             if (tabName === 'home' && chartInstance) {
                 setTimeout(() => {
+                    hasUserScrolled = false;
                     const totalPoints = chartInstance.data.labels.length;
                     if (totalPoints > 0) {
-                        chartInstance.scales.x.options.min = Math.max(0, totalPoints - 48); // Ultimi 48 punti (4 ore)
+                        chartInstance.scales.x.options.min = Math.max(0, totalPoints - 48); // Finestra iniziale di 4 ore
                         chartInstance.scales.x.options.max = totalPoints - 1;
                         chartInstance.update('none');
                     }
@@ -328,13 +330,14 @@
             }
 
             const ctx = document.getElementById('bgChart').getContext('2d');
-            const recentHistory = bgHistory.slice(-288); // 24 ore esatte di letture (1 lettura ogni 5 min)
+            
+            // STATO MODIFICATO: Estraiamo esattamente 288 letture (= 24 ore a intervalli di 5 min)
+            const recentHistory = bgHistory.slice(-288); 
             const labels = recentHistory.map(item => item.time);
             const values = recentHistory.map(item => item.value);
 
             const totalPoints = labels.length;
-            // Mostriamo di base una finestra di circa 4 ore (48 punti da 5 minuti ciascuno)
-            const defaultSpan = 48; 
+            const defaultSpan = 48; // Finestra visibile predefinita di 4 ore per mantenere i punti grandi e chiari
             const minIndex = Math.max(0, totalPoints - defaultSpan);
             const maxIndex = totalPoints - 1;
 
@@ -343,8 +346,8 @@
                 chartInstance.data.datasets[0].data = values;
                 chartInstance.data.datasets[0].pointBackgroundColor = values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#10b981');
                 
-                // Mantiene la vista corrente aggiornata senza resettare lo scroll dell'utente durante i refresh automatici
-                if(chartInstance.scales.x.min === 0 && chartInstance.scales.x.max === 0) {
+                // Aggiorna la posizione a destra solo se l'utente non ha iniziato a scorrere manualmente verso sinistra
+                if (!hasUserScrolled) {
                     chartInstance.scales.x.options.min = minIndex;
                     chartInstance.scales.x.options.max = maxIndex;
                 }
@@ -379,7 +382,6 @@
                                 stacked: true
                             },
                             x: { 
-                                // Inizializza la finestra visibile bloccata sulle ultime ore caricate
                                 min: minIndex,
                                 max: maxIndex,
                                 grid: { display: false }, 
@@ -400,12 +402,15 @@
                                 displayColors: false,
                                 callbacks: { label: (c) => `Glicemia: ${c.raw} mg/dL alle ${c.label}` }
                             },
-                            // Configurazione nativa del plugin zoom per abilitare lo scroll (Pan) lineare
                             zoom: {
                                 pan: {
                                     enabled: true,
-                                    mode: 'x', // Abilita solo lo scorrimento orizzontale
-                                    threshold: 10
+                                    mode: 'x',
+                                    threshold: 5,
+                                    onPanStart: () => {
+                                        // Intercetta l'azione di scroll dell'utente per evitare il reset automatico al successivo refresh
+                                        hasUserScrolled = true;
+                                    }
                                 }
                             }
                         }
