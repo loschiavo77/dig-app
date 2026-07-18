@@ -20,22 +20,21 @@
         }
         .tab-content { display: none; }
         .tab-content.active { display: flex; flex-direction: column; flex-grow: 1; }
-        ::-webkit-scrollbar { height: 4px; width: 4px; }
-        ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.2); }
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.3); }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-        
-        /* Contenitore a schermo fisso che permette lo scroll orizzontale */
+
+        /* Contenitore per lo scroll orizzontale del grafico */
         .chart-scroll-container {
             width: 100%;
             overflow-x: auto;
             overflow-y: hidden;
-            scroll-behavior: auto; /* 'auto' previene scatti durante il riallineamento */
             -webkit-overflow-scrolling: touch;
         }
+        /* Larghezza impostata via JS a 6 volte lo schermo (24 ore / 4 ore visibili = 6) */
         .chart-wrapper {
-            height: 220px;
-            /* La larghezza reale verrà calcolata via JS per simulare lo zoom sulle 4 ore */
-            min-width: 100%; 
+            height: 100%;
+            min-width: 100%;
         }
     </style>
 </head>
@@ -77,8 +76,8 @@
         <div id="alert-box" class="mt-3 p-2.5 rounded bg-red-950/50 border border-red-500 text-red-400 text-xs font-bold hidden animate-pulse text-center"></div>
         <div id="predictive-alert-box" class="mt-2 p-2.5 rounded bg-yellow-950/40 border border-yellow-600 text-yellow-400 text-xs font-bold hidden text-center border-dashed"></div>
 
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 my-3 flex-grow flex flex-col justify-center min-h-[240px]">
-            <div class="chart-scroll-container" id="chartScrollDiv">
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 my-3 flex-grow flex flex-col justify-center min-h-[220px]">
+            <div class="chart-scroll-container h-full" id="chartScrollDiv">
                 <div class="chart-wrapper" id="chartWrapperDiv">
                     <canvas id="bgChart"></canvas>
                 </div>
@@ -138,12 +137,15 @@
         let chartInstance = null;
         let recognition = null;
         let isListening = false;
+        
         let isAudioEnabled = false;
         let savedChat = [];
 
         try {
             savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
-        } catch(e) { savedChat = []; }
+        } catch(e) { 
+            savedChat = []; 
+        }
 
         function toggleAudioOutput() {
             isAudioEnabled = !isAudioEnabled;
@@ -167,45 +169,73 @@
             utterance.lang = 'it-IT';
             utterance.rate = 0.95;
             utterance.pitch = 0.85;
+
+            const voices = window.speechSynthesis.getVoices();
+            let selectedVoice = voices.find(v => v.lang.startsWith('it') && v.name.toLowerCase().includes('google') && !v.name.toLowerCase().includes('female'));
+            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it') && (v.name.toLowerCase().includes('cosimo') || v.name.toLowerCase().includes('male')));
+            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it'));
+
+            if (selectedVoice) utterance.voice = selectedVoice;
             window.speechSynthesis.speak(utterance);
+        }
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = () => { console.log("Voci caricate"); };
         }
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
             recognition.lang = 'it-IT';
-            recognition.onstart = () => { isListening = true; document.getElementById('mic-btn').classList.add('border-emerald-500', 'text-emerald-400', 'animate-pulse'); };
-            recognition.onend = () => { isListening = false; document.getElementById('mic-btn').classList.remove('border-emerald-500', 'text-emerald-400', 'animate-pulse'); };
-            recognition.onresult = (event) => { document.getElementById('chat-input').value = event.results[0][0].transcript; sendMessage(); };
+            recognition.continuous = false;
+            recognition.interimResults = false;
+
+            recognition.onstart = () => {
+                isListening = true;
+                document.getElementById('mic-btn').classList.add('border-emerald-500', 'text-emerald-400', 'animate-pulse');
+            };
+
+            recognition.onend = () => {
+                isListening = false;
+                document.getElementById('mic-btn').classList.remove('border-emerald-500', 'text-emerald-400', 'animate-pulse');
+            };
+
+            recognition.onresult = (event) => {
+                const text = event.results[0][0].transcript;
+                document.getElementById('chat-input').value = text;
+                sendMessage();
+            };
         }
 
         function toggleVoiceInput() {
-            if (!recognition) return;
+            if (!recognition) { alert("Il comando vocale non è supportato su questo browser."); return; }
             if (isListening) recognition.stop(); else recognition.start();
         }
 
         function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
-            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('text-emerald-400').add('text-slate-500'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('text-emerald-400'));
+            document.querySelectorAll('.nav-btn').forEach(el => el.classList.add('text-slate-500'));
+            
             document.getElementById('tab-' + tabName).classList.add('active');
             if(window.event && window.event.target) {
-                window.event.target.classList.remove('text-slate-500').add('text-emerald-400');
+                window.event.target.classList.remove('text-slate-500');
+                window.event.target.classList.add('text-emerald-400');
             }
-            // Forza il riallineamento a destra se l'utente torna sulla Home
+
+            // Riposiziona lo scroll a destra se l'utente torna alla home
             if(tabName === 'home') {
                 setTimeout(() => {
                     const scrollDiv = document.getElementById('chartScrollDiv');
-                    if(scrollDiv) scrollDiv.scrollLeft = scrollDiv.scrollWidth;
-                }, 100);
+                    if (scrollDiv) scrollDiv.scrollLeft = scrollDiv.scrollWidth;
+                }, 50);
             }
         }
 
         async function fetchCareLinkData() {
             document.getElementById('last-sync').innerText = "Sincronizzazione...";
             try {
-                // Recupera le letture fino a 14 giorni fa per l'archivio completo
-                const quattordiciGiorniFa = Date.now() - (14 * 24 * 60 * 60 * 1000);
-                const response = await fetch(`http://127.0.0.1:17580/sgv.json?find[date][$gte]=${quattordiciGiorniFa}&count=10000`);
+                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=4032');
                 const data = await response.json();
                 
                 if (data && data.length > 0) {
@@ -221,6 +251,7 @@
                     }).reverse();
 
                     localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
+                    
                     checkRealtimeAndPredictiveAlerts();
                     updateUI();
                     
@@ -247,10 +278,10 @@
 
             const predictiveBox = document.getElementById('predictive-alert-box');
             if (stimaProssimi15min < 70 && current >= 70) {
-                predictiveBox.innerText = `PREDISPOSIZIONE IPO: Rischio stimato ~${Math.round(stimaProssimi15min)} mg/dL tra 15 min.`;
+                predictiveBox.innerText = `PREDISPOSIZIONE IPO: Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
                 predictiveBox.classList.remove('hidden');
             } else if (stimaProssimi15min > 180 && current <= 180) {
-                predictiveBox.innerText = `PREDISPOSIZIONE IPER: Rischio stimato ~${Math.round(stimaProssimi15min)} mg/dL tra 15 min.`;
+                predictiveBox.innerText = `PREDISPOSIZIONE IPER: Tendenza in rapida salita. Rischio iperglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
                 predictiveBox.classList.remove('hidden');
             } else {
                 predictiveBox.classList.add('hidden');
@@ -259,24 +290,23 @@
 
         function updateUI() {
             if (bgHistory.length === 0) return;
-            
-            // 1. Aggiorna i dati istantanei in alto
             const current = bgHistory[bgHistory.length - 1];
             document.getElementById('bg-value').innerText = current.value;
+            
             let arrow = "→";
             if (current.trend === "UP") arrow = "↑";
             if (current.trend === "DOWN") arrow = "↓";
             document.getElementById('bg-trend').innerText = arrow;
 
-            // TIR nelle ultime 24 ore reali
-            const unGiornoFa = Date.now() - (24 * 60 * 60 * 1000);
-            const dati24h = bgHistory.filter(item => new Date(item.rawDate).getTime() >= unGiornoFa);
-            const inRange = dati24h.filter(item => item.value >= 70 && item.value <= 180).length;
-            const tir = dati24h.length > 0 ? Math.round((inRange / dati24h.length) * 100) : 0;
+            const inRange = bgHistory.filter(item => item.value >= 70 && item.value <= 180).length;
+            const tir = bgHistory.length > 0 ? Math.round((inRange / bgHistory.length) * 100) : 0;
             const tirElement = document.getElementById('tir-value');
             tirElement.innerText = `${tir}%`;
+            
+            if (tir >= 70) tirElement.className = "text-3xl font-black text-emerald-400 font-mono";
+            else if (tir >= 50) tirElement.className = "text-3xl font-black text-yellow-500 font-mono";
+            else tirElement.className = "text-3xl font-black text-red-500 font-mono";
 
-            // 2. Popola l'Archivio Storico (Ultime 2 settimane composte)
             const archiveList = document.getElementById('archive-list');
             archiveList.innerHTML = '';
             const groupedData = {};
@@ -286,8 +316,8 @@
                 const today = new Date();
                 const yesterday = new Date();
                 yesterday.setDate(today.getDate() - 1);
-                const itemDateObj = new Date(item.rawDate);
                 
+                const itemDateObj = new Date(item.rawDate);
                 if (itemDateObj.toDateString() === today.toDateString()) label = "Oggi";
                 else if (itemDateObj.toDateString() === yesterday.toDateString()) label = "Ieri";
                 else label = item.date.substring(0, 5);
@@ -308,22 +338,18 @@
                 archiveList.innerHTML += groupHTML;
             }
 
-            // 3. COSTRUZIONE GRAFICO SCROLLABILE (Mostra 4 ore, scorri per le 24 totali)
             const ctx = document.getElementById('bgChart').getContext('2d');
             
-            // Prendiamo solo le ultime 24 ore di dati per il grafico principale della Home
-            const timelineGrafico = bgHistory.filter(item => new Date(item.rawDate).getTime() >= unGiornoFa);
-            
-            const labels = timelineGrafico.map(item => item.time);
-            const values = timelineGrafico.map(item => item.value);
+            const recentHistory = bgHistory.slice(-288); // 24 ore complete
+            const labels = recentHistory.map(item => item.time);
+            const values = recentHistory.map(item => item.value);
 
-            // LOGICA DI ZOOM: Calcoliamo la larghezza del box esterno. Per vedere 4 ore alla volta nitidamente,
-            // l'intero nastro delle 24 ore deve essere largo esattamente 6 volte lo schermo visibile (24 ore / 4 ore = 6)
+            // GESTIONE PROPORZIONE LARGHEZZA GRAFICO (Zoom 4 ore)
             const scrollDiv = document.getElementById('chartScrollDiv');
             const wrapper = document.getElementById('chartWrapperDiv');
             const larghezzaVisibile = scrollDiv.offsetWidth || 350; 
             
-            // Impostiamo la larghezza totale a 6 volte lo spazio visibile
+            // 24 ore totali / 4 ore visibili = il nastro deve essere lungo 6 volte lo schermo
             wrapper.style.width = (larghezzaVisibile * 6) + 'px';
 
             if (chartInstance) {
@@ -343,9 +369,9 @@
                             borderWidth: 2.5,
                             pointBackgroundColor: values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#10b981'),
                             pointBorderColor: '#020617',
-                            pointBorderWidth: 1.5,
-                            pointRadius: 3,
-                            tension: 0.2,
+                            pointBorderWidth: 1,
+                            pointRadius: 2,
+                            tension: 0.25,
                             fill: false
                         }]
                     },
@@ -357,13 +383,14 @@
                             tooltip: {
                                 enabled: true,
                                 backgroundColor: '#0f172a',
-                                bodyFont: { weight: 'bold', size: 12 },
+                                bodyFont: { weight: 'bold', size: 13 },
+                                displayColors: false,
                                 callbacks: { label: (c) => `Glicemia: ${c.raw} mg/dL alle ${c.label}` }
                             }
                         },
                         scales: {
                             y: { min: 40, max: 250, grid: { color: 'rgba(30, 41, 59, 0.4)' }, ticks: { color: '#94a3b8', stepSize: 30 } },
-                            x: { grid: { display: false }, ticks: { color: '#94a3b8', autoSkip: true, maxTicksLimit: 24 } }
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8', maxTicksLimit: 24, autoSkip: true } }
                         }
                     },
                     plugins: [{
@@ -385,18 +412,28 @@
                 });
             }
 
-            // Sposta automaticamente la visualizzazione tutto a destra (sulle ultime 4 ore correnti)
+            // Forza l'allineamento automatico sull'ora attuale (tutto a destra)
             setTimeout(() => {
                 scrollDiv.scrollLeft = scrollDiv.scrollWidth;
-            }, 200);
+            }, 100);
         }
 
         function promptManualTimer(type) {
-            const inputGiorni = prompt(`Quanti GIORNI deve durare?`, type === 'sensor' ? "10" : "3");
+            const inputGiorni = prompt(`[${type.toUpperCase()}] Quanti GIORNI deve durare?`, type === 'sensor' ? "10" : "3");
             if (inputGiorni === null) return;
-            const inputOre = prompt(`Quante ORE aggiuntive?`, "0");
+            
+            const inputOre = prompt(`[${type.toUpperCase()}] Quante ORE aggiuntive?`, "0");
             if (inputOre === null) return;
-            const expirationTime = Date.now() + (parseFloat(inputGiorni)*24*60*60*1000) + (parseFloat(inputOre)*60*60*1000);
+
+            const giorni = parseFloat(inputGiorni) || 0;
+            const ore = parseFloat(inputOre) || 0;
+
+            if (giorni < 0 || ore < 0 || (giorni === 0 && ore === 0)) return;
+
+            const msGiorni = giorni * 24 * 60 * 60 * 1000;
+            const msOre = ore * 60 * 60 * 1000;
+            const expirationTime = Date.now() + msGiorni + msOre;
+
             localStorage.setItem(`dig_expire_${type}`, expirationTime);
             updateTimers();
         }
@@ -404,7 +441,7 @@
         function updateTimers() {
             ['sensor', 'set'].forEach(type => {
                 const expire = localStorage.getItem(`dig_expire_${type}`);
-                if (!expire) { document.getElementById(`${type}-timer`).innerText = "--"; return; }
+                if (!expire) { document.getElementById(`${type}-timer`).innerText = "Non impostato"; return; }
                 const diff = expire - Date.now();
                 if (diff <= 0) {
                     document.getElementById(`${type}-timer`).innerText = "SCADUTO!";
@@ -413,30 +450,46 @@
                     const days = Math.floor(diff / (24 * 60 * 60 * 1000));
                     const hours = Math.floor((diff % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
                     const mins = Math.floor((diff % (60 * 60 * 1000)) / (60 * 1000));
+                    
                     document.getElementById(`${type}-timer`).innerText = `${days}g ${hours}o ${mins}m`;
+                    document.getElementById(`${type}-timer`).className = diff < (24 * 60 * 60 * 1000) ? "text-sm font-black text-yellow-500 font-mono block mt-1" : "text-sm font-black text-emerald-400 font-mono block mt-1";
                 }
             });
         }
 
-        function triggerAlert(message) { const box = document.getElementById('alert-box'); box.innerText = message; box.classList.remove('hidden'); }
+        function triggerAlert(message) {
+            const box = document.getElementById('alert-box');
+            box.innerText = message; box.classList.remove('hidden');
+        }
         function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
         function renderSavedChat() {
             const chatContainer = document.getElementById('chat-messages');
             chatContainer.innerHTML = '';
+            
             if(savedChat.length === 0) {
-                chatContainer.innerHTML = `<div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">Ciao Lorenzo! Sono pronto ad aiutarti. Chiedimi pure analisi o consigli sul trend glicemico.</div>`;
+                chatContainer.innerHTML = `<div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">Ciao! Sono l'assistente DIG avanzato. Puoi scrivermi o toccare il microfono per parlare a voce. Chiedimi qualunque cosa!</div>`;
             } else {
                 savedChat.forEach(msg => {
-                    let cls = msg.type === 'user' ? "bg-emerald-500 text-slate-950 self-end ml-auto font-semibold" : "bg-slate-900 border border-slate-800 text-slate-300";
-                    if(msg.type === 'error') cls = "bg-slate-900 border border-red-900/50 text-red-400";
-                    chatContainer.innerHTML += `<div class="${cls} p-2.5 rounded-lg max-w-[85%]">${msg.text}</div>`;
+                    if (msg.type === 'user') {
+                        chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${msg.text}</div>`;
+                    } else if (msg.type === 'bot') {
+                        chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${msg.text}</div>`;
+                    } else if (msg.type === 'error') {
+                        chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${msg.text}</div>`;
+                    }
                 });
             }
             chatContainer.scrollTop = chatContainer.scrollHeight;
         }
 
-        function clearChatMemory() { if(confirm("Cancellare la cronologia?")) { localStorage.removeItem('dig_chat_history'); savedChat = []; renderSavedChat(); } }
+        function clearChatMemory() {
+            if(confirm("Vuoi cancellare definitivamente tutta la cronologia della chat?")) {
+                localStorage.removeItem('dig_chat_history');
+                savedChat = [];
+                renderSavedChat();
+            }
+        }
 
         async function sendMessage() {
             const input = document.getElementById('chat-input');
@@ -444,9 +497,11 @@
             if(!userText) return;
 
             const chatContainer = document.getElementById('chat-messages');
+            
             chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${userText}</div>`;
             savedChat.push({ type: 'user', text: userText });
             localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
+            
             input.value = '';
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
@@ -455,29 +510,61 @@
             chatContainer.scrollTop = chatContainer.scrollHeight;
 
             let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
-            const chatHistoryCompleta = [
-                { role: "system", content: "Tu sei DIG, un assistente guida per il diabete. Sii sintetico e rispondi in pochissime battute. Inizia sempre con 'Ciao Lorenzo,'." },
-                ...savedChat.map(msg => ({ role: msg.type === 'user' ? 'user' : 'assistant', content: msg.text }))
-            ];
+
+            const istruzioniComportamento = {
+                role: "system",
+                content: "Tu sei DIG, un assistente intelligenza guida per il diabete. Sii estremamente sintetico, preciso e rispondi in pochissime battute prendendo spunto dai messaggi passati della chat se utili. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'."
+            };
+
+            const messaggiPerServer = savedChat.map(msg => {
+                return {
+                    role: msg.type === 'user' ? 'user' : 'assistant',
+                    content: msg.text
+                };
+            });
+
+            const chatHistoryCompleta = [istruzioniComportamento, ...messaggiPerServer];
 
             try {
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: userText, history: chatHistoryCompleta, currentBg: currentBg })
+                    body: JSON.stringify({
+                        message: userText,
+                        history: chatHistoryCompleta,
+                        currentBg: currentBg
+                    })
                 });
-                document.getElementById(typingId).remove();
+
+                if(!response.ok) throw new Error("Server error");
                 const data = await response.json();
                 
-                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${data.reply}</div>`;
-                savedChat.push({ type: 'bot', text: data.reply });
-                localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-                speakText(data.reply);
+                const typingEl = document.getElementById(typingId);
+                if(typingEl) typingEl.remove();
+
+                if (data.reply) {
+                    chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${data.reply}</div>`;
+                    savedChat.push({ type: 'bot', text: data.reply });
+                    localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
+                    
+                    chatContainer.scrollTop = chatContainer.scrollHeight;
+                    speakText(data.reply);
+                } else {
+                    throw new Error("No reply");
+                }
+
             } catch (err) {
-                document.getElementById(typingId).remove();
-                const errTxt = "Errore di connessione con la IA.";
-                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errTxt}</div>`;
+                const typingEl = document.getElementById(typingId);
+                if(typingEl) typingEl.remove();
+                
+                const errorReply = "Ops! Non sono riuscito a connettermi al mio server. Controlla di aver configurato correttamente Vercel e la chiave API.";
+                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
+                
+                savedChat.push({ type: 'error', text: errorReply });
+                localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
+                
+                chatContainer.scrollTop = chatContainer.scrollHeight;
+                speakText(errorReply);
             }
         }
 
@@ -486,6 +573,24 @@
         setInterval(fetchCareLinkData, 60000);
         updateTimers();
         setInterval(updateTimers, 60000);
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                const swCode = `
+                    self.addEventListener('install', (e) => self.skipWaiting());
+                    self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+                    self.addEventListener('fetch', (e) => {
+                        e.respondWith(fetch(e.request).catch(() => new Response("Offline")));
+                    });
+                `;
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                const swUrl = URL.createObjectURL(blob);
+                
+                navigator.serviceWorker.register(swUrl, { scope: '/' })
+                    .then(() => console.log('PWA Service Worker attivato con successo.'))
+                    .catch(err => console.error('Errore Service Worker:', err));
+            });
+        }
     </script>
 </body>
 </html>
