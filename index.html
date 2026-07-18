@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -36,7 +35,7 @@
     <div id="tab-archive" class="tab-content justify-between">
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-[68vh]">
             <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 pb-1 border-b border-slate-800">
-                Archivio Storico Glicemie
+                Archivio Storico Glicemie (2 Settimane)
             </h3>
             <div id="archive-list" class="flex-grow overflow-y-auto space-y-4 pr-1">
                 <div class="text-slate-500 text-xs italic text-center py-4">Caricamento dati storici...</div>
@@ -55,7 +54,7 @@
             </div>
             
             <div class="text-right border-l border-slate-800 pl-4">
-                <div class="text-slate-500 text-[10px] uppercase tracking-widest font-bold">TIR (24h)</div>
+                <div class="text-slate-500 text-[10px] uppercase tracking-widest font-bold">TIR (Storico)</div>
                 <div class="text-3xl font-black text-emerald-400 font-mono" id="tir-value">--%</div>
                 <span class="text-[9px] text-slate-500">Target: 70-180 mg/dL</span>
             </div>
@@ -122,17 +121,15 @@
         let recognition = null;
         let isListening = false;
         
-        // GESTIONE STATO VOCE (Spenta all'avvio)
         let isAudioEnabled = false;
-
         let savedChat = [];
+
         try {
             savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
         } catch(e) { 
             savedChat = []; 
         }
 
-        // Funzione per accendere/spegnere la sintesi vocale delle risposte
         function toggleAudioOutput() {
             isAudioEnabled = !isAudioEnabled;
             const btn = document.getElementById('toggle-audio-btn');
@@ -144,13 +141,12 @@
                 btn.innerText = "Voce: OFF";
                 btn.classList.remove('text-emerald-400', 'border-emerald-500', 'bg-emerald-950/30');
                 btn.classList.add('text-slate-400', 'border-slate-700', 'bg-slate-950');
-                window.speechSynthesis.cancel(); // Blocca subito l'audio se si spegne mentre parla
+                window.speechSynthesis.cancel();
             }
         }
 
-        // Sintesi Vocale Condizionata dallo Stato
         function speakText(text) {
-            if (!('speechSynthesis' in window) || !isAudioEnabled) return; // Se disattivato, non parla
+            if (!('speechSynthesis' in window) || !isAudioEnabled) return;
             window.speechSynthesis.cancel();
             const utterance = new SpeechSynthesisUtterance(text);
             utterance.lang = 'it-IT';
@@ -170,7 +166,6 @@
             window.speechSynthesis.onvoiceschanged = () => { console.log("Voci caricate"); };
         }
 
-        // Riconoscimento Vocale (Microfono)
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             recognition = new SpeechRecognition();
@@ -206,16 +201,17 @@
             document.querySelectorAll('.nav-btn').forEach(el => el.classList.add('text-slate-500'));
             
             document.getElementById('tab-' + tabName).classList.add('active');
-            if(event && event.target) {
-                event.target.classList.remove('text-slate-500');
-                event.target.classList.add('text-emerald-400');
+            if(window.event && window.event.target) {
+                window.event.target.classList.remove('text-slate-500');
+                window.event.target.classList.add('text-emerald-400');
             }
         }
 
         async function fetchCareLinkData() {
             document.getElementById('last-sync').innerText = "Sincronizzazione...";
             try {
-                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=288');
+                // MODIFICATO: Aumentato il count a 4032 per scaricare fino a 14 giorni completi di storico da xDrip+
+                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=4032');
                 const data = await response.json();
                 
                 if (data && data.length > 0) {
@@ -319,13 +315,16 @@
             }
 
             const ctx = document.getElementById('bgChart').getContext('2d');
-            const recentHistory = bgHistory.slice(-24);
+            
+            // MODIFICATO: Il grafico centrale ora taglia le ultime 288 letture (pari a 24 ore esatte di oscillazione)
+            const recentHistory = bgHistory.slice(-288);
             const labels = recentHistory.map(item => item.time);
             const values = recentHistory.map(item => item.value);
 
             if (chartInstance) {
                 chartInstance.data.labels = labels;
                 chartInstance.data.datasets[0].data = values;
+                chartInstance.data.datasets[0].pointBackgroundColor = values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#10b981');
                 chartInstance.update();
             } else {
                 chartInstance = new Chart(ctx, {
@@ -336,11 +335,11 @@
                             label: 'Glicemia',
                             data: values,
                             borderColor: '#ffffff',
-                            borderWidth: 3,
+                            borderWidth: 2.5,
                             pointBackgroundColor: values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#10b981'),
                             pointBorderColor: '#020617',
-                            pointBorderWidth: 1.5,
-                            pointRadius: 4.5,
+                            pointBorderWidth: 1,
+                            pointRadius: 2,
                             tension: 0.25,
                             fill: false
                         }]
@@ -359,8 +358,8 @@
                             }
                         },
                         scales: {
-                            y: { min: 40, max: 250, grid: { color: 'rgba(30, 41, 59, 0.5)' }, ticks: { color: '#94a3b8', stepSize: 30 } },
-                            x: { grid: { display: false }, ticks: { color: '#94a3b8', maxTicksLimit: 6 } }
+                            y: { min: 40, max: 250, grid: { color: 'rgba(30, 41, 59, 0.4)' }, ticks: { color: '#94a3b8', stepSize: 30 } },
+                            x: { grid: { display: false }, ticks: { color: '#94a3b8', maxTicksLimit: 8 } }
                         }
                     },
                     plugins: [{
@@ -383,7 +382,6 @@
             }
         }
 
-        // TIMER AVANZATO GIORNI + ORE
         function promptManualTimer(type) {
             const inputGiorni = prompt(`[${type.toUpperCase()}] Quanti GIORNI deve durare?`, type === 'sensor' ? "10" : "3");
             if (inputGiorni === null) return;
@@ -396,7 +394,6 @@
 
             if (giorni < 0 || ore < 0 || (giorni === 0 && ore === 0)) return;
 
-            // Calcolo del tempo totale in millisecondi
             const msGiorni = giorni * 24 * 60 * 60 * 1000;
             const msOre = ore * 60 * 60 * 1000;
             const expirationTime = Date.now() + msGiorni + msOre;
@@ -478,8 +475,6 @@
 
             let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
 
-            // CREAZIONE DELLA CRONOLOGIA COMPLETA DA INVIARE AL SERVER
-            // Mappiamo i messaggi salvati per renderli compatibili con l'API e aggiungiamo le istruzioni stabili in cima
             const istruzioniComportamento = {
                 role: "system",
                 content: "Tu sei DIG, un assistente intelligenza guida per il diabete. Sii estremamente sintetico, preciso e rispondi in pochissime battute prendendo spunto dai messaggi passati della chat se utili. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'."
@@ -492,7 +487,6 @@
                 };
             });
 
-            // Uniamo le regole fisse del sistema con la cronologia dei messaggi scambiati
             const chatHistoryCompleta = [istruzioniComportamento, ...messaggiPerServer];
 
             try {
@@ -501,7 +495,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         message: userText,
-                        history: chatHistoryCompleta, // Inviamo tutta la memoria storica strutturata!
+                        history: chatHistoryCompleta,
                         currentBg: currentBg
                     })
                 });
@@ -544,14 +538,12 @@
         updateTimers();
         setInterval(updateTimers, 60000);
 
-        // REGISTRAZIONE DEL SERVICE WORKER INLINE (Per abilitare l'installazione PWA)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 const swCode = `
                     self.addEventListener('install', (e) => self.skipWaiting());
                     self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
                     self.addEventListener('fetch', (e) => {
-                        // Pass-through nativo per far funzionare le chiamate esterne
                         e.respondWith(fetch(e.request).catch(() => new Response("Offline")));
                     });
                 `;
