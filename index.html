@@ -12,6 +12,8 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
+    
     <style>
         body {
             background-color: #020617;
@@ -20,22 +22,9 @@
         }
         .tab-content { display: none; }
         .tab-content.active { display: flex; flex-direction: column; flex-grow: 1; }
-        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.3); }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
-
-        /* Contenitore per lo scroll orizzontale del grafico */
-        .chart-scroll-container {
-            width: 100%;
-            overflow-x: auto;
-            overflow-y: hidden;
-            -webkit-overflow-scrolling: touch;
-        }
-        /* Larghezza impostata via JS a 6 volte lo schermo (24 ore / 4 ore visibili = 6) */
-        .chart-wrapper {
-            height: 100%;
-            min-width: 100%;
-        }
     </style>
 </head>
 <body class="flex flex-col min-h-screen p-4 max-w-md mx-auto">
@@ -76,12 +65,8 @@
         <div id="alert-box" class="mt-3 p-2.5 rounded bg-red-950/50 border border-red-500 text-red-400 text-xs font-bold hidden animate-pulse text-center"></div>
         <div id="predictive-alert-box" class="mt-2 p-2.5 rounded bg-yellow-950/40 border border-yellow-600 text-yellow-400 text-xs font-bold hidden text-center border-dashed"></div>
 
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 my-3 flex-grow flex flex-col justify-center min-h-[220px]">
-            <div class="chart-scroll-container h-full" id="chartScrollDiv">
-                <div class="chart-wrapper" id="chartWrapperDiv">
-                    <canvas id="bgChart"></canvas>
-                </div>
-            </div>
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 my-3 flex-grow flex flex-col justify-center min-h-[220px] relative">
+            <canvas id="bgChart"></canvas>
         </div>
 
         <div class="grid grid-cols-2 gap-3 mb-2">
@@ -223,11 +208,15 @@
                 window.event.target.classList.add('text-emerald-400');
             }
 
-            // Riposiziona lo scroll a destra se l'utente torna alla home
-            if(tabName === 'home') {
+            // Ripristina la vista all'estrema destra se si torna in Home
+            if (tabName === 'home' && chartInstance) {
                 setTimeout(() => {
-                    const scrollDiv = document.getElementById('chartScrollDiv');
-                    if (scrollDiv) scrollDiv.scrollLeft = scrollDiv.scrollWidth;
+                    const totalPoints = chartInstance.data.labels.length;
+                    if (totalPoints > 0) {
+                        chartInstance.scales.x.options.min = Math.max(0, totalPoints - 48); // Ultimi 48 punti (4 ore)
+                        chartInstance.scales.x.options.max = totalPoints - 1;
+                        chartInstance.update('none');
+                    }
                 }, 50);
             }
         }
@@ -339,23 +328,26 @@
             }
 
             const ctx = document.getElementById('bgChart').getContext('2d');
-            
-            const recentHistory = bgHistory.slice(-288); // 24 ore complete
+            const recentHistory = bgHistory.slice(-288); // 24 ore esatte di letture (1 lettura ogni 5 min)
             const labels = recentHistory.map(item => item.time);
             const values = recentHistory.map(item => item.value);
 
-            // GESTIONE PROPORZIONE LARGHEZZA GRAFICO (Zoom 4 ore)
-            const scrollDiv = document.getElementById('chartScrollDiv');
-            const wrapper = document.getElementById('chartWrapperDiv');
-            const larghezzaVisibile = scrollDiv.offsetWidth || 350; 
-            
-            // 24 ore totali / 4 ore visibili = il nastro deve essere lungo 6 volte lo schermo
-            wrapper.style.width = (larghezzaVisibile * 6) + 'px';
+            const totalPoints = labels.length;
+            // Mostriamo di base una finestra di circa 4 ore (48 punti da 5 minuti ciascuno)
+            const defaultSpan = 48; 
+            const minIndex = Math.max(0, totalPoints - defaultSpan);
+            const maxIndex = totalPoints - 1;
 
             if (chartInstance) {
                 chartInstance.data.labels = labels;
                 chartInstance.data.datasets[0].data = values;
                 chartInstance.data.datasets[0].pointBackgroundColor = values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#10b981');
+                
+                // Mantiene la vista corrente aggiornata senza resettare lo scroll dell'utente durante i refresh automatici
+                if(chartInstance.scales.x.min === 0 && chartInstance.scales.x.max === 0) {
+                    chartInstance.scales.x.options.min = minIndex;
+                    chartInstance.scales.x.options.max = maxIndex;
+                }
                 chartInstance.update();
             } else {
                 chartInstance = new Chart(ctx, {
@@ -370,7 +362,7 @@
                             pointBackgroundColor: values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#10b981'),
                             pointBorderColor: '#020617',
                             pointBorderWidth: 1,
-                            pointRadius: 2,
+                            pointRadius: 3,
                             tension: 0.25,
                             fill: false
                         }]
@@ -378,6 +370,27 @@
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
+                        scales: {
+                            y: { 
+                                min: 40, 
+                                max: 250, 
+                                grid: { color: 'rgba(30, 41, 59, 0.4)' }, 
+                                ticks: { color: '#94a3b8', stepSize: 30 },
+                                stacked: true
+                            },
+                            x: { 
+                                // Inizializza la finestra visibile bloccata sulle ultime ore caricate
+                                min: minIndex,
+                                max: maxIndex,
+                                grid: { display: false }, 
+                                ticks: { 
+                                    color: '#94a3b8', 
+                                    maxRotation: 0,
+                                    autoSkip: true,
+                                    maxTicksLimit: 6
+                                } 
+                            }
+                        },
                         plugins: { 
                             legend: { display: false },
                             tooltip: {
@@ -386,11 +399,15 @@
                                 bodyFont: { weight: 'bold', size: 13 },
                                 displayColors: false,
                                 callbacks: { label: (c) => `Glicemia: ${c.raw} mg/dL alle ${c.label}` }
+                            },
+                            // Configurazione nativa del plugin zoom per abilitare lo scroll (Pan) lineare
+                            zoom: {
+                                pan: {
+                                    enabled: true,
+                                    mode: 'x', // Abilita solo lo scorrimento orizzontale
+                                    threshold: 10
+                                }
                             }
-                        },
-                        scales: {
-                            y: { min: 40, max: 250, grid: { color: 'rgba(30, 41, 59, 0.4)' }, ticks: { color: '#94a3b8', stepSize: 30 } },
-                            x: { grid: { display: false }, ticks: { color: '#94a3b8', maxTicksLimit: 24, autoSkip: true } }
                         }
                     },
                     plugins: [{
@@ -411,11 +428,6 @@
                     }]
                 });
             }
-
-            // Forza l'allineamento automatico sull'ora attuale (tutto a destra)
-            setTimeout(() => {
-                scrollDiv.scrollLeft = scrollDiv.scrollWidth;
-            }, 100);
         }
 
         function promptManualTimer(type) {
