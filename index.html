@@ -166,12 +166,21 @@
         let savedChat = [];
         let hasUserScrolled = false;
         let lastNotifiedTime = 0;
+        let isFetching = false;
 
         try {
             savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
         } catch(e) { 
             savedChat = []; 
         }
+
+        // Recupero ultimo storico salvato se presente
+        try {
+            const cachedHistory = localStorage.getItem('dig_bgHistory');
+            if (cachedHistory) {
+                bgHistory = JSON.parse(cachedHistory);
+            }
+        } catch(e) {}
 
         // --- SISTEMA AUDIO E NOTIFICHE ---
         function playAudioBeep(freq = 880, type = 'sine', duration = 0.3) {
@@ -221,17 +230,19 @@
             setTimeout(() => playAudioBeep(880, 'sawtooth', 0.4), 450);
 
             if ("Notification" in window && Notification.permission === "granted") {
-                if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.ready.then(registration => {
-                        registration.showNotification(title, {
-                            body: body,
-                            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🩸</text></svg>',
-                            vibrate: [300, 100, 300, 100, 300]
+                try {
+                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.ready.then(registration => {
+                            registration.showNotification(title, {
+                                body: body,
+                                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🩸</text></svg>',
+                                vibrate: [300, 100, 300, 100, 300]
+                            });
                         });
-                    });
-                } else {
-                    new Notification(title, { body: body });
-                }
+                    } else {
+                        new Notification(title, { body: body });
+                    }
+                } catch(e) { console.log("Errore invio notifica", e); }
             }
             lastNotifiedTime = now;
         }
@@ -325,11 +336,26 @@
             }
         }
 
-        // --- FETCH CARELINK / XDRIP+ DATI ---
+        // --- FETCH CARELINK / XDRIP+ DATI CON TIMEOUT ANTIBLOCCO ---
         async function fetchCareLinkData() {
-            document.getElementById('last-sync').innerText = "Sincronizzazione...";
+            if (isFetching) return;
+            isFetching = true;
+
+            const syncEl = document.getElementById('last-sync');
+            if (syncEl) syncEl.innerText = "Sincronizzazione...";
+
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 secondi di timeout
+
             try {
-                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=4032');
+                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=4032', {
+                    signal: controller.signal,
+                    cache: 'no-store'
+                });
+                clearTimeout(timeoutId);
+
+                if (!response.ok) throw new Error("Risposta HTTP non valida");
+
                 const data = await response.json();
                 
                 if (data && data.length > 0) {
@@ -354,16 +380,24 @@
                         };
                     }).reverse();
 
-                    localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
+                    try {
+                        localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
+                    } catch(e) {}
                     
                     checkRealtimeAndPredictiveAlerts();
                     updateUI();
                     
                     let oraAttuale = new Date();
-                    document.getElementById('last-sync').innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
+                    if (syncEl) syncEl.innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
                 }
             } catch (err) {
-                document.getElementById('last-sync').innerText = "In attesa di xDrip+...";
+                if (syncEl) syncEl.innerText = "Riconnessione xDrip...";
+                // In caso di errore di connessione, visualizza comunque i dati locali memorizzati
+                if (bgHistory.length > 0) {
+                    updateUI();
+                }
+            } finally {
+                isFetching = false;
             }
         }
 
@@ -708,14 +742,23 @@
             document.getElementById('chat-messages').innerHTML = '';
         }
 
+        // AUTO-RECONNETTI QUANDO LA SCHEDA RITORNA ATTIVA
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') {
+                fetchCareLinkData();
+            }
+        });
+
         window.addEventListener('DOMContentLoaded', () => {
             updateNotificationBtnUI();
             updateTimers();
             renderSavedChat();
+            if (bgHistory.length > 0) updateUI();
+            
             setInterval(updateTimers, 60000);
             
             fetchCareLinkData();
-            setInterval(fetchCareLinkData, 60000);
+            setInterval(fetchCareLinkData, 30000); // Frequenza a 30 sec per maggior reattività
         });
     </script>
 </body>
