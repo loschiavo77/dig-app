@@ -51,7 +51,7 @@
     <div id="tab-archive" class="tab-content justify-between">
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-[68vh]">
             <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 pb-1 border-b border-slate-800">
-                Archivio Storico Glicemie
+                Archivio Storico Glicemie (fino a 14 Giorni)
             </h3>
             <div id="archive-list" class="flex-grow overflow-y-auto space-y-4 pr-1">
                 <div class="text-slate-500 text-xs italic text-center py-4">Caricamento dati storici...</div>
@@ -149,14 +149,6 @@
     </div>
 
     <script>
-        // =========================================================================
-        // CONFIGURAZIONE ENDPOINT API GLICEMIA
-        // Modifica questa riga se il tuo server usa un percorso o dominio diverso:
-        // Es. relativo: '/api/v1/entries.json' oppure '/api/data'
-        // Es. assoluto: 'https://TUONAME.herokuapp.com/api/v1/entries.json'
-        // =========================================================================
-        const API_URL = '/api/v1/entries.json';
-
         let bgHistory = [];
         let chartInstance = null;
         let recognition = null;
@@ -168,9 +160,11 @@
 
         try {
             savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
-        } catch(e) { savedChat = []; }
+        } catch(e) { 
+            savedChat = []; 
+        }
 
-        // --- SISTEMA AUDIO ---
+        // --- SISTEMA AUDIO E NOTIFICHE ---
         function playAudioBeep(freq = 880, type = 'sine', duration = 0.3) {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -183,22 +177,20 @@
                 gain.connect(audioCtx.destination);
                 osc.start();
                 osc.stop(audioCtx.currentTime + duration);
-            } catch(e) {}
+            } catch(e) { console.log("Audio non supportato"); }
         }
 
         function requestNotificationPermission() {
             if (!("Notification" in window)) {
-                alert("Questo browser non supporta le notifiche push standard.");
+                alert("Questo browser non supporta le notifiche di sistema. DIG userà gli allarmi acustici integrati.");
                 return;
             }
-            try {
-                Notification.requestPermission().then(permission => {
-                    updateNotificationBtnUI();
-                    if (permission === "granted") {
-                        sendPushNotification("DIG Attivo", "Le notifiche sono attive.");
-                    }
-                }).catch(err => console.log("Permesso notifiche errore:", err));
-            } catch(e) {}
+            Notification.requestPermission().then(permission => {
+                updateNotificationBtnUI();
+                if (permission === "granted") {
+                    sendPushNotification("DIG Attivo", "Le notifiche per gli allarmi glicemici sono attive.");
+                }
+            });
         }
 
         function updateNotificationBtnUI() {
@@ -217,23 +209,21 @@
             if (now - lastNotifiedTime < 15 * 60 * 1000 && title !== "DIG Attivo") return;
 
             playAudioBeep(660, 'sawtooth', 0.4);
+            setTimeout(() => playAudioBeep(880, 'sawtooth', 0.4), 450);
 
-            try {
-                if ("Notification" in window && Notification.permission === "granted") {
-                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                        navigator.serviceWorker.ready.then(registration => {
-                            registration.showNotification(title, {
-                                body: body,
-                                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🩸</text></svg>',
-                                vibrate: [300, 100, 300, 100, 300]
-                            }).catch(e => console.log(e));
-                        }).catch(e => console.log(e));
-                    } else {
-                        new Notification(title, { body: body });
-                    }
+            if ("Notification" in window && Notification.permission === "granted") {
+                if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification(title, {
+                            body: body,
+                            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🩸</text></svg>',
+                            vibrate: [300, 100, 300, 100, 300]
+                        });
+                    });
+                } else {
+                    new Notification(title, { body: body });
                 }
-            } catch (e) {}
-
+            }
             lastNotifiedTime = now;
         }
 
@@ -246,31 +236,29 @@
             } else {
                 btn.innerText = "Voce: OFF";
                 btn.className = "text-[9px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-950 text-slate-400 font-bold transition-colors";
-                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+                window.speechSynthesis.cancel();
             }
         }
 
         function speakText(text) {
             if (!('speechSynthesis' in window) || !isAudioEnabled) return;
-            try {
-                window.speechSynthesis.cancel();
-                const utterance = new SpeechSynthesisUtterance(text);
-                utterance.lang = 'it-IT';
-                utterance.rate = 0.95;
-                utterance.pitch = 0.85;
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'it-IT';
+            utterance.rate = 0.95;
+            utterance.pitch = 0.85;
 
-                const voices = window.speechSynthesis.getVoices();
-                let selectedVoice = voices.find(v => v.lang.startsWith('it') && v.name.toLowerCase().includes('google') && !v.name.toLowerCase().includes('female'));
-                if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it') && (v.name.toLowerCase().includes('cosimo') || v.name.toLowerCase().includes('male')));
-                if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it'));
+            const voices = window.speechSynthesis.getVoices();
+            let selectedVoice = voices.find(v => v.lang.startsWith('it') && v.name.toLowerCase().includes('google') && !v.name.toLowerCase().includes('female'));
+            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it') && (v.name.toLowerCase().includes('cosimo') || v.name.toLowerCase().includes('male')));
+            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it'));
 
-                if (selectedVoice) utterance.voice = selectedVoice;
-                window.speechSynthesis.speak(utterance);
-            } catch(e) {}
+            if (selectedVoice) utterance.voice = selectedVoice;
+            window.speechSynthesis.speak(utterance);
         }
 
         if ('speechSynthesis' in window) {
-            window.speechSynthesis.onvoiceschanged = () => {};
+            window.speechSynthesis.onvoiceschanged = () => { console.log("Voci caricate"); };
         }
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -298,7 +286,7 @@
         }
 
         function toggleVoiceInput() {
-            if (!recognition) { alert("Comando vocale non disponibile."); return; }
+            if (!recognition) { alert("Il comando vocale non è supportato su questo dispositivo."); return; }
             if (isListening) recognition.stop(); else recognition.start();
         }
 
@@ -328,82 +316,40 @@
             }
         }
 
-        // --- FETCH CARELINK / NIGHTSCOUT ---
+        // --- FETCH CARELINK / XDRIP+ DATI ---
         async function fetchCareLinkData() {
-            const syncLabel = document.getElementById('last-sync');
-            syncLabel.innerText = "Sync...";
-            syncLabel.className = "text-xs text-slate-500 font-mono";
-
+            document.getElementById('last-sync').innerText = "Sincronizzazione...";
             try {
-                const cacheBuster = Date.now();
-                const separator = API_URL.includes('?') ? '&' : '?';
-                const fullFetchUrl = `${API_URL}${separator}count=288&_=${cacheBuster}`;
-
-                const response = await fetch(fullFetchUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Cache-Control': 'no-cache, no-store, must-revalidate',
-                        'Pragma': 'no-cache',
-                        'Accept': 'application/json'
-                    }
-                });
-
-                if (!response.ok) {
-                    if (response.status === 404) {
-                        throw new Error("404 (Endpoint non trovato)");
-                    }
-                    throw new Error(`HTTP ${response.status}`);
-                }
-
+                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=4032');
                 const data = await response.json();
+                
+                if (data && data.length > 0) {
+                    bgHistory = data.map(item => {
+                        let date = new Date(item.date);
+                        let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
+                        let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+                        let trendWord = "FLAT";
+                        if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
+                        if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
+                        
+                        return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord, rawDate: date };
+                    }).reverse();
 
-                if (!data || (Array.isArray(data) && data.length === 0)) {
-                    throw new Error("Nessun dato");
+                    localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
+                    
+                    checkRealtimeAndPredictiveAlerts();
+                    updateUI();
+                    
+                    let oraAttuale = new Date();
+                    document.getElementById('last-sync').innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
                 }
-
-                const list = Array.isArray(data) ? data : [data];
-
-                bgHistory = list.map(item => {
-                    let date = new Date(item.date || item.dateString || Date.now());
-                    let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
-                    let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-                    let trendWord = "FLAT";
-                    if (item.direction && item.direction.includes("Up")) trendWord = "UP";
-                    if (item.direction && item.direction.includes("Down")) trendWord = "DOWN";
-
-                    return { date: dateStr, time: timeStr, value: item.sgv || item.glucose || item.val, trend: trendWord, rawDate: date };
-                }).filter(i => i.value !== undefined).reverse();
-
-                if (bgHistory.length === 0) throw new Error("Formato dati errato");
-
-                localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
-
-                checkRealtimeAndPredictiveAlerts();
-                updateUI();
-
-                let oraAttuale = new Date();
-                syncLabel.innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
-                syncLabel.className = "text-xs text-emerald-400 font-mono";
-
             } catch (err) {
-                console.error("Errore Sync:", err);
-                syncLabel.innerText = `Errore: ${err.message}`;
-                syncLabel.className = "text-xs text-red-400 font-mono font-bold";
-
-                const localData = localStorage.getItem('dig_bgHistory');
-                if (localData) {
-                    try {
-                        bgHistory = JSON.parse(localData);
-                        checkRealtimeAndPredictiveAlerts();
-                        updateUI();
-                    } catch(e) {}
-                }
+                document.getElementById('last-sync').innerText = "In attesa di xDrip+...";
             }
         }
 
-        // --- CONTROLLO ALLARMI ---
         function checkRealtimeAndPredictiveAlerts() {
-            if (!bgHistory || bgHistory.length === 0) return;
+            if (bgHistory.length < 4) return;
             const current = bgHistory[bgHistory.length - 1].value;
             
             if (current < 70) {
@@ -418,34 +364,30 @@
                 silenceAlarm();
             }
 
-            if (bgHistory.length >= 4) {
-                try {
-                    const p1 = bgHistory[bgHistory.length - 1].value;
-                    const p4 = bgHistory[bgHistory.length - 4].value;
-                    const delta15min = p1 - p4;
-                    const stimaProssimi15min = p1 + delta15min;
+            const p1 = bgHistory[bgHistory.length - 1].value;
+            const p4 = bgHistory[bgHistory.length - 4].value;
+            const delta15min = p1 - p4;
+            const stimaProssimi15min = p1 + delta15min;
 
-                    const predictiveBox = document.getElementById('predictive-alert-box');
-                    if (stimaProssimi15min < 70 && current >= 70) {
-                        const msg = `Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
-                        predictiveBox.innerText = `PREDISPOSIZIONE IPO: ${msg}`;
-                        predictiveBox.classList.remove('hidden');
-                        sendPushNotification("🔻 PREVISIONE IPO", msg);
-                    } else if (stimaProssimi15min > 180 && current <= 180) {
-                        const msg = `Tendenza in rapida salita. Rischio iperglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
-                        predictiveBox.innerText = `PREDISPOSIZIONE IPER: ${msg}`;
-                        predictiveBox.classList.remove('hidden');
-                        sendPushNotification("🔺 PREVISIONE IPER", msg);
-                    } else {
-                        predictiveBox.classList.add('hidden');
-                    }
-                } catch(e) {}
+            const predictiveBox = document.getElementById('predictive-alert-box');
+            if (stimaProssimi15min < 70 && current >= 70) {
+                const msg = `Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
+                predictiveBox.innerText = `PREDISPOSIZIONE IPO: ${msg}`;
+                predictiveBox.classList.remove('hidden');
+                sendPushNotification("🔻 PREVISIONE IPO", msg);
+            } else if (stimaProssimi15min > 180 && current <= 180) {
+                const msg = `Tendenza in rapida salita. Rischio iperglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
+                predictiveBox.innerText = `PREDISPOSIZIONE IPER: ${msg}`;
+                predictiveBox.classList.remove('hidden');
+                sendPushNotification("🔺 PREVISIONE IPER", msg);
+            } else {
+                predictiveBox.classList.add('hidden');
             }
         }
 
-        // --- RENDER INTERFACCIA E GRAFICO ---
+        // --- RENDER INTERFACCIA E GRAFICO CARELINK ---
         function updateUI() {
-            if (!bgHistory || bgHistory.length === 0) return;
+            if (bgHistory.length === 0) return;
             const current = bgHistory[bgHistory.length - 1];
             document.getElementById('bg-value').innerText = current.value;
             
@@ -463,7 +405,7 @@
             else if (tir >= 50) tirElement.className = "text-3xl font-black text-yellow-500 font-mono";
             else tirElement.className = "text-3xl font-black text-red-500 font-mono";
 
-            // ARCHIVIO
+            // POPOLAMENTO ARCHIVIO STORICO
             const archiveList = document.getElementById('archive-list');
             archiveList.innerHTML = '';
             const groupedData = {};
@@ -477,7 +419,7 @@
                 const itemDateObj = new Date(item.rawDate);
                 if (itemDateObj.toDateString() === today.toDateString()) label = "Oggi";
                 else if (itemDateObj.toDateString() === yesterday.toDateString()) label = "Ieri";
-                else label = item.date ? item.date.substring(0, 5) : "Data";
+                else label = item.date.substring(0, 5);
 
                 if (!groupedData[label]) groupedData[label] = [];
                 groupedData[label].push(item);
@@ -495,13 +437,13 @@
                 archiveList.innerHTML += groupHTML;
             }
 
-            // GRAFICO CARELINK
+            // --- CONFIGURAZIONE GRAFICO CARELINK CON SCROLL ORIZZONTALE ---
             const ctx = document.getElementById('bgChart').getContext('2d');
             const labels = bgHistory.map(item => item.time);
             const values = bgHistory.map(item => item.value);
 
             const totalPoints = labels.length;
-            const defaultSpan = 48;
+            const defaultSpan = 48; // Ultimi 48 punti (~4 ore)
             const minIndex = Math.max(0, totalPoints - defaultSpan);
             const maxIndex = totalPoints - 1;
 
@@ -570,7 +512,9 @@
                                     enabled: true,
                                     mode: 'x',
                                     threshold: 2,
-                                    onPanStart: () => { hasUserScrolled = true; }
+                                    onPanStart: () => {
+                                        hasUserScrolled = true;
+                                    }
                                 }
                             }
                         }
@@ -579,10 +523,13 @@
                         id: 'chartLines',
                         beforeDraw: (chart) => {
                             const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
+                            // Fascia Verde TIR (70 - 180)
                             ctx.fillStyle = 'rgba(16, 185, 129, 0.12)'; 
                             ctx.fillRect(x.left, y.getPixelForValue(180), x.right - x.left, y.getPixelForValue(70) - y.getPixelForValue(180));
+                            // Fascia Iper (>180)
                             ctx.fillStyle = 'rgba(245, 158, 11, 0.05)'; 
                             ctx.fillRect(x.left, y.getPixelForValue(y.max), x.right - x.left, y.getPixelForValue(180) - y.getPixelForValue(y.max));
+                            // Fascia Ipo (<70)
                             ctx.fillStyle = 'rgba(239, 68, 68, 0.08)'; 
                             ctx.fillRect(x.left, y.getPixelForValue(70), x.right - x.left, y.getPixelForValue(y.min) - y.getPixelForValue(70));
                         },
@@ -601,22 +548,29 @@
         // --- TIMER HARDWARE ---
         function resetTimerQuick(type, defaultDays) {
             const msDays = defaultDays * 24 * 60 * 60 * 1000;
-            localStorage.setItem(`dig_expire_${type}`, Date.now() + msDays);
+            const expirationTime = Date.now() + msDays;
+            
+            localStorage.setItem(`dig_expire_${type}`, expirationTime);
             updateTimers();
         }
 
         function promptManualTimer(type) {
             const inputGiorni = prompt(`[${type.toUpperCase()}] Quanti GIORNI deve durare?`, type === 'sensor' ? "7" : "3");
             if (inputGiorni === null) return;
+            
             const inputOre = prompt(`[${type.toUpperCase()}] Quante ORE aggiuntive?`, "0");
             if (inputOre === null) return;
 
             const giorni = parseFloat(inputGiorni) || 0;
             const ore = parseFloat(inputOre) || 0;
+
             if (giorni < 0 || ore < 0 || (giorni === 0 && ore === 0)) return;
 
-            const ms = (giorni * 24 * 60 * 60 * 1000) + (ore * 60 * 60 * 1000);
-            localStorage.setItem(`dig_expire_${type}`, Date.now() + ms);
+            const msGiorni = giorni * 24 * 60 * 60 * 1000;
+            const msOre = ore * 60 * 60 * 1000;
+            const expirationTime = Date.now() + msGiorni + msOre;
+
+            localStorage.setItem(`dig_expire_${type}`, expirationTime);
             updateTimers();
         }
 
@@ -645,7 +599,7 @@
         }
         function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
-        // --- CHAT ASSISTANT ---
+        // --- CHAT ASSISTANT INTELLIGENTE ---
         function renderSavedChat() {
             const chatContainer = document.getElementById('chat-messages');
             chatContainer.innerHTML = '';
@@ -667,7 +621,7 @@
         }
 
         function clearChatMemory() {
-            if(confirm("Vuoi cancellare la cronologia della chat?")) {
+            if(confirm("Vuoi cancellare definitivamente tutta la cronologia della chat?")) {
                 localStorage.removeItem('dig_chat_history');
                 savedChat = [];
                 renderSavedChat();
@@ -699,10 +653,12 @@
                 content: "Tu sei DIG, un assistente intelligenza guida per il diabete. Sii estremamente sintetico, preciso e rispondi in pochissime battute prendendo spunto dai messaggi passati della chat se utili. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'."
             };
 
-            const messaggiPerServer = savedChat.map(msg => ({
-                role: msg.type === 'user' ? 'user' : 'assistant',
-                content: msg.text
-            }));
+            const messaggiPerServer = savedChat.map(msg => {
+                return {
+                    role: msg.type === 'user' ? 'user' : 'assistant',
+                    content: msg.text
+                };
+            });
 
             const chatHistoryCompleta = [istruzioniComportamento, ...messaggiPerServer];
 
@@ -738,7 +694,7 @@
                 const typingEl = document.getElementById(typingId);
                 if(typingEl) typingEl.remove();
                 
-                const errorReply = "Ops! Non sono riuscito a connettermi al server.";
+                const errorReply = "Ops! Non sono riuscito a connettermi al server. Verifica di aver inserito correttamente la chiave API.";
                 chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
                 
                 savedChat.push({ type: 'error', text: errorReply });
@@ -749,7 +705,7 @@
             }
         }
 
-        // --- AVVIO APP ---
+        // --- INIZIALIZZAZIONE ---
         renderSavedChat();
         updateNotificationBtnUI();
         fetchCareLinkData();
@@ -763,12 +719,14 @@
                     self.addEventListener('install', (e) => self.skipWaiting());
                     self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
                     self.addEventListener('fetch', (e) => {
-                        if (e.request.url.includes('/api/')) return;
                         e.respondWith(fetch(e.request).catch(() => new Response("Offline")));
                     });
                 `;
                 const blob = new Blob([swCode], { type: 'application/javascript' });
-                navigator.serviceWorker.register(URL.createObjectURL(blob), { scope: '/' })
+                const swUrl = URL.createObjectURL(blob);
+                
+                navigator.serviceWorker.register(swUrl, { scope: '/' })
+                    .then(() => console.log('Service Worker attivo.'))
                     .catch(err => console.error('Errore SW:', err));
             });
         }
