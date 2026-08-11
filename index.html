@@ -164,7 +164,7 @@
             savedChat = []; 
         }
 
-        // --- SISTEMA AUDIO E NOTIFICHE ---
+        // --- SISTEMA AUDIO ROBUSTO ---
         function playAudioBeep(freq = 880, type = 'sine', duration = 0.3) {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -177,20 +177,22 @@
                 gain.connect(audioCtx.destination);
                 osc.start();
                 osc.stop(audioCtx.currentTime + duration);
-            } catch(e) { console.log("Audio non supportato"); }
+            } catch(e) { console.log("Audio non disponibile"); }
         }
 
         function requestNotificationPermission() {
             if (!("Notification" in window)) {
-                alert("Questo browser non supporta le notifiche di sistema. DIG userà gli allarmi acustici integrati.");
+                alert("Questo browser non supporta le notifiche push standard.");
                 return;
             }
-            Notification.requestPermission().then(permission => {
-                updateNotificationBtnUI();
-                if (permission === "granted") {
-                    sendPushNotification("DIG Attivo", "Le notifiche per gli allarmi glicemici sono attive.");
-                }
-            });
+            try {
+                Notification.requestPermission().then(permission => {
+                    updateNotificationBtnUI();
+                    if (permission === "granted") {
+                        sendPushNotification("DIG Attivo", "Le notifiche sono attive.");
+                    }
+                }).catch(err => console.log("Permesso notifiche errore:", err));
+            } catch(e) { console.log(e); }
         }
 
         function updateNotificationBtnUI() {
@@ -204,26 +206,31 @@
             }
         }
 
+        // --- NOTIFICA CON PROTEZIONE ERRORI PER CHROME/PWA ---
         function sendPushNotification(title, body) {
             const now = Date.now();
             if (now - lastNotifiedTime < 15 * 60 * 1000 && title !== "DIG Attivo") return;
 
             playAudioBeep(660, 'sawtooth', 0.4);
-            setTimeout(() => playAudioBeep(880, 'sawtooth', 0.4), 450);
 
-            if ("Notification" in window && Notification.permission === "granted") {
-                if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-                    navigator.serviceWorker.ready.then(registration => {
-                        registration.showNotification(title, {
-                            body: body,
-                            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🩸</text></svg>',
-                            vibrate: [300, 100, 300, 100, 300]
-                        });
-                    });
-                } else {
-                    new Notification(title, { body: body });
+            try {
+                if ("Notification" in window && Notification.permission === "granted") {
+                    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                        navigator.serviceWorker.ready.then(registration => {
+                            registration.showNotification(title, {
+                                body: body,
+                                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🩸</text></svg>',
+                                vibrate: [300, 100, 300, 100, 300]
+                            }).catch(e => console.log(e));
+                        }).catch(e => console.log(e));
+                    } else {
+                        new Notification(title, { body: body });
+                    }
                 }
+            } catch (e) {
+                console.warn("Notifiche non supportate o bloccate in questo contesto:", e);
             }
+
             lastNotifiedTime = now;
         }
 
@@ -236,25 +243,27 @@
             } else {
                 btn.innerText = "Voce: OFF";
                 btn.className = "text-[9px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-950 text-slate-400 font-bold transition-colors";
-                window.speechSynthesis.cancel();
+                if ('speechSynthesis' in window) window.speechSynthesis.cancel();
             }
         }
 
         function speakText(text) {
             if (!('speechSynthesis' in window) || !isAudioEnabled) return;
-            window.speechSynthesis.cancel();
-            const utterance = new SpeechSynthesisUtterance(text);
-            utterance.lang = 'it-IT';
-            utterance.rate = 0.95;
-            utterance.pitch = 0.85;
+            try {
+                window.speechSynthesis.cancel();
+                const utterance = new SpeechSynthesisUtterance(text);
+                utterance.lang = 'it-IT';
+                utterance.rate = 0.95;
+                utterance.pitch = 0.85;
 
-            const voices = window.speechSynthesis.getVoices();
-            let selectedVoice = voices.find(v => v.lang.startsWith('it') && v.name.toLowerCase().includes('google') && !v.name.toLowerCase().includes('female'));
-            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it') && (v.name.toLowerCase().includes('cosimo') || v.name.toLowerCase().includes('male')));
-            if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it'));
+                const voices = window.speechSynthesis.getVoices();
+                let selectedVoice = voices.find(v => v.lang.startsWith('it') && v.name.toLowerCase().includes('google') && !v.name.toLowerCase().includes('female'));
+                if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it') && (v.name.toLowerCase().includes('cosimo') || v.name.toLowerCase().includes('male')));
+                if (!selectedVoice) selectedVoice = voices.find(v => v.lang.startsWith('it'));
 
-            if (selectedVoice) utterance.voice = selectedVoice;
-            window.speechSynthesis.speak(utterance);
+                if (selectedVoice) utterance.voice = selectedVoice;
+                window.speechSynthesis.speak(utterance);
+            } catch(e) {}
         }
 
         if ('speechSynthesis' in window) {
@@ -316,21 +325,21 @@
             }
         }
 
-        // --- FETCH CARELINK / XDRIP+ DATI ---
+        // --- FETCH CARELINK / NIGHTSCOUT PROTETTO ---
         async function fetchCareLinkData() {
-            document.getElementById('last-sync').innerText = "Sincronizzazione...";
+            document.getElementById('last-sync').innerText = "Sync...";
             try {
-                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=4032');
+                const response = await fetch('/api/v1/entries.json?count=4032');
                 const data = await response.json();
                 
                 if (data && data.length > 0) {
                     bgHistory = data.map(item => {
-                        let date = new Date(item.date);
+                        let date = new Date(item.date || item.dateString);
                         let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
                         let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
                         let trendWord = "FLAT";
-                        if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
-                        if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
+                        if (item.direction && item.direction.includes("Up")) trendWord = "UP";
+                        if (item.direction && item.direction.includes("Down")) trendWord = "DOWN";
                         
                         return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord, rawDate: date };
                     }).reverse();
@@ -344,14 +353,29 @@
                     document.getElementById('last-sync').innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
                 }
             } catch (err) {
-                document.getElementById('last-sync').innerText = "In attesa di xDrip+...";
+                // FALLBACK SU DATI MEMORIZZATI LOCALE PER EVITARE SCHERMO BIANCO
+                const localData = localStorage.getItem('dig_bgHistory');
+                if (localData) {
+                    try {
+                        bgHistory = JSON.parse(localData);
+                        checkRealtimeAndPredictiveAlerts();
+                        updateUI();
+                        document.getElementById('last-sync').innerText = "Dati Locali";
+                    } catch(e) {
+                        document.getElementById('last-sync').innerText = "In attesa...";
+                    }
+                } else {
+                    document.getElementById('last-sync').innerText = "In attesa...";
+                }
             }
         }
 
+        // --- CONTROLLO ALLARMI SICURO (NON BLOCA IL DISPLAY) ---
         function checkRealtimeAndPredictiveAlerts() {
-            if (bgHistory.length < 4) return;
+            if (!bgHistory || bgHistory.length === 0) return;
             const current = bgHistory[bgHistory.length - 1].value;
             
+            // 1. Allarme in tempo reale
             if (current < 70) {
                 const msg = `ATTENZIONE: IPOGLICEMIA A ${current} mg/dL!`;
                 triggerAlert(msg);
@@ -364,30 +388,37 @@
                 silenceAlarm();
             }
 
-            const p1 = bgHistory[bgHistory.length - 1].value;
-            const p4 = bgHistory[bgHistory.length - 4].value;
-            const delta15min = p1 - p4;
-            const stimaProssimi15min = p1 + delta15min;
+            // 2. Allarme predittivo
+            if (bgHistory.length >= 4) {
+                try {
+                    const p1 = bgHistory[bgHistory.length - 1].value;
+                    const p4 = bgHistory[bgHistory.length - 4].value;
+                    const delta15min = p1 - p4;
+                    const stimaProssimi15min = p1 + delta15min;
 
-            const predictiveBox = document.getElementById('predictive-alert-box');
-            if (stimaProssimi15min < 70 && current >= 70) {
-                const msg = `Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
-                predictiveBox.innerText = `PREDISPOSIZIONE IPO: ${msg}`;
-                predictiveBox.classList.remove('hidden');
-                sendPushNotification("🔻 PREVISIONE IPO", msg);
-            } else if (stimaProssimi15min > 180 && current <= 180) {
-                const msg = `Tendenza in rapida salita. Rischio iperglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
-                predictiveBox.innerText = `PREDISPOSIZIONE IPER: ${msg}`;
-                predictiveBox.classList.remove('hidden');
-                sendPushNotification("🔺 PREVISIONE IPER", msg);
-            } else {
-                predictiveBox.classList.add('hidden');
+                    const predictiveBox = document.getElementById('predictive-alert-box');
+                    if (stimaProssimi15min < 70 && current >= 70) {
+                        const msg = `Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
+                        predictiveBox.innerText = `PREDISPOSIZIONE IPO: ${msg}`;
+                        predictiveBox.classList.remove('hidden');
+                        sendPushNotification("🔻 PREVISIONE IPO", msg);
+                    } else if (stimaProssimi15min > 180 && current <= 180) {
+                        const msg = `Tendenza in rapida salita. Rischio iperglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
+                        predictiveBox.innerText = `PREDISPOSIZIONE IPER: ${msg}`;
+                        predictiveBox.classList.remove('hidden');
+                        sendPushNotification("🔺 PREVISIONE IPER", msg);
+                    } else {
+                        predictiveBox.classList.add('hidden');
+                    }
+                } catch(e) {
+                    console.log("Errore calcolo predittivo ignorato:", e);
+                }
             }
         }
 
         // --- RENDER INTERFACCIA E GRAFICO CARELINK ---
         function updateUI() {
-            if (bgHistory.length === 0) return;
+            if (!bgHistory || bgHistory.length === 0) return;
             const current = bgHistory[bgHistory.length - 1];
             document.getElementById('bg-value').innerText = current.value;
             
@@ -405,7 +436,7 @@
             else if (tir >= 50) tirElement.className = "text-3xl font-black text-yellow-500 font-mono";
             else tirElement.className = "text-3xl font-black text-red-500 font-mono";
 
-            // POPOLAMENTO ARCHIVIO STORICO
+            // ARCHIVIO
             const archiveList = document.getElementById('archive-list');
             archiveList.innerHTML = '';
             const groupedData = {};
@@ -419,7 +450,7 @@
                 const itemDateObj = new Date(item.rawDate);
                 if (itemDateObj.toDateString() === today.toDateString()) label = "Oggi";
                 else if (itemDateObj.toDateString() === yesterday.toDateString()) label = "Ieri";
-                else label = item.date.substring(0, 5);
+                else label = item.date ? item.date.substring(0, 5) : "Data";
 
                 if (!groupedData[label]) groupedData[label] = [];
                 groupedData[label].push(item);
@@ -437,7 +468,7 @@
                 archiveList.innerHTML += groupHTML;
             }
 
-            // --- CONFIGURAZIONE GRAFICO CARELINK CON SCROLL ORIZZONTALE ---
+            // GRAFICO CARELINK CON SCROLL
             const ctx = document.getElementById('bgChart').getContext('2d');
             const labels = bgHistory.map(item => item.time);
             const values = bgHistory.map(item => item.value);
@@ -523,13 +554,10 @@
                         id: 'chartLines',
                         beforeDraw: (chart) => {
                             const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
-                            // Fascia Verde TIR (70 - 180)
                             ctx.fillStyle = 'rgba(16, 185, 129, 0.12)'; 
                             ctx.fillRect(x.left, y.getPixelForValue(180), x.right - x.left, y.getPixelForValue(70) - y.getPixelForValue(180));
-                            // Fascia Iper (>180)
                             ctx.fillStyle = 'rgba(245, 158, 11, 0.05)'; 
                             ctx.fillRect(x.left, y.getPixelForValue(y.max), x.right - x.left, y.getPixelForValue(180) - y.getPixelForValue(y.max));
-                            // Fascia Ipo (<70)
                             ctx.fillStyle = 'rgba(239, 68, 68, 0.08)'; 
                             ctx.fillRect(x.left, y.getPixelForValue(70), x.right - x.left, y.getPixelForValue(y.min) - y.getPixelForValue(70));
                         },
@@ -549,7 +577,6 @@
         function resetTimerQuick(type, defaultDays) {
             const msDays = defaultDays * 24 * 60 * 60 * 1000;
             const expirationTime = Date.now() + msDays;
-            
             localStorage.setItem(`dig_expire_${type}`, expirationTime);
             updateTimers();
         }
@@ -599,7 +626,7 @@
         }
         function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
-        // --- CHAT ASSISTANT INTELLIGENTE ---
+        // --- CHAT ASSISTANT ---
         function renderSavedChat() {
             const chatContainer = document.getElementById('chat-messages');
             chatContainer.innerHTML = '';
@@ -694,7 +721,7 @@
                 const typingEl = document.getElementById(typingId);
                 if(typingEl) typingEl.remove();
                 
-                const errorReply = "Ops! Non sono riuscito a connettermi al server. Verifica di aver inserito correttamente la chiave API.";
+                const errorReply = "Ops! Non sono riuscito a connettermi al server. Verifica la connessione o l'API key.";
                 chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
                 
                 savedChat.push({ type: 'error', text: errorReply });
@@ -723,10 +750,7 @@
                     });
                 `;
                 const blob = new Blob([swCode], { type: 'application/javascript' });
-                const swUrl = URL.createObjectURL(blob);
-                
-                navigator.serviceWorker.register(swUrl, { scope: '/' })
-                    .then(() => console.log('Service Worker attivo.'))
+                navigator.serviceWorker.register(URL.createObjectURL(blob), { scope: '/' })
                     .catch(err => console.error('Errore SW:', err));
             });
         }
