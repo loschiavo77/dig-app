@@ -174,7 +174,6 @@
             savedChat = []; 
         }
 
-        // Recupero ultimo storico salvato se presente
         try {
             const cachedHistory = localStorage.getItem('dig_bgHistory');
             if (cachedHistory) {
@@ -345,7 +344,7 @@
             if (syncEl) syncEl.innerText = "Sincronizzazione...";
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 secondi di timeout
+            const timeoutId = setTimeout(() => controller.abort(), 5000);
 
             try {
                 const response = await fetch('http://127.0.0.1:17580/sgv.json?count=4032', {
@@ -367,13 +366,19 @@
                         if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
                         if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
                         
+                        // Estrazione sicura del valore IOB da xDrip / Nightscout JSON
+                        let calculatedIob = null;
+                        if (item.iob !== undefined && item.iob !== null) {
+                            calculatedIob = parseFloat(item.iob).toFixed(1);
+                        }
+
                         return { 
                             date: dateStr, 
                             time: timeStr, 
                             value: item.sgv, 
                             trend: trendWord, 
                             rawDate: date,
-                            iob: item.iob || null,
+                            iob: calculatedIob,
                             bolus: item.bolus ? 400 : null,
                             bolusColor: item.bolusType === 'manual' ? '#06b6d4' : '#c026d3',
                             meal: item.mb ? 50 : null
@@ -392,7 +397,6 @@
                 }
             } catch (err) {
                 if (syncEl) syncEl.innerText = "Riconnessione xDrip...";
-                // In caso di errore di connessione, visualizza comunque i dati locali memorizzati
                 if (bgHistory.length > 0) {
                     updateUI();
                 }
@@ -449,10 +453,12 @@
             if (current.trend === "DOWN") arrow = "↓";
             document.getElementById('bg-trend').innerText = arrow;
 
+            // INTEGRAZIONE ED ESPOSIZIONE IOB
+            const iobEl = document.getElementById('iob-value');
             if (current.iob !== null && current.iob !== undefined) {
-                document.getElementById('iob-value').innerText = `${current.iob} U`;
+                iobEl.innerText = `${current.iob} U`;
             } else {
-                document.getElementById('iob-value').innerText = `-- U`;
+                iobEl.innerText = `-- U`;
             }
 
             const inRange = bgHistory.filter(item => item.value >= 70 && item.value <= 180).length;
@@ -505,7 +511,7 @@
             const mealValues = bgHistory.map(item => item.meal || null);
 
             const totalPoints = labels.length;
-            const defaultSpan = 48; // Ultimi 48 punti (~4 ore)
+            const defaultSpan = 48;
             const minIndex = Math.max(0, totalPoints - defaultSpan);
             const maxIndex = totalPoints - 1;
 
@@ -611,11 +617,9 @@
                         beforeDraw: (chart) => {
                             const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
                             ctx.save();
-                            // Fascia Verde Target (70 - 180)
                             ctx.fillStyle = 'rgba(16, 185, 129, 0.15)'; 
                             ctx.fillRect(x.left, y.getPixelForValue(180), x.right - x.left, y.getPixelForValue(70) - y.getPixelForValue(180));
                             
-                            // Linee di limite 240 e 70 mg/dL
                             const y240 = y.getPixelForValue(240);
                             const y70 = y.getPixelForValue(70);
                             
@@ -742,7 +746,6 @@
             document.getElementById('chat-messages').innerHTML = '';
         }
 
-        // AUTO-RECONNETTI QUANDO LA SCHEDA RITORNA ATTIVA
         document.addEventListener('visibilitychange', () => {
             if (document.visibilityState === 'visible') {
                 fetchCareLinkData();
@@ -758,7 +761,7 @@
             setInterval(updateTimers, 60000);
             
             fetchCareLinkData();
-            setInterval(fetchCareLinkData, 30000); // Frequenza a 30 sec per maggior reattività
+            setInterval(fetchCareLinkData, 30000);
         });
     </script>
 </body>
