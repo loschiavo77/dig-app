@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -150,6 +149,14 @@
     </div>
 
     <script>
+        // =========================================================================
+        // CONFIGURAZIONE ENDPOINT API GLICEMIA
+        // Modifica questa riga se il tuo server usa un percorso o dominio diverso:
+        // Es. relativo: '/api/v1/entries.json' oppure '/api/data'
+        // Es. assoluto: 'https://TUONAME.herokuapp.com/api/v1/entries.json'
+        // =========================================================================
+        const API_URL = '/api/v1/entries.json';
+
         let bgHistory = [];
         let chartInstance = null;
         let recognition = null;
@@ -321,7 +328,7 @@
             }
         }
 
-        // --- FETCH CARELINK / NIGHTSCOUT (DIAGNOSTICA E FIX REALE) ---
+        // --- FETCH CARELINK / NIGHTSCOUT ---
         async function fetchCareLinkData() {
             const syncLabel = document.getElementById('last-sync');
             syncLabel.innerText = "Sync...";
@@ -329,7 +336,10 @@
 
             try {
                 const cacheBuster = Date.now();
-                const response = await fetch(`/api/v1/entries.json?count=288&_=${cacheBuster}`, {
+                const separator = API_URL.includes('?') ? '&' : '?';
+                const fullFetchUrl = `${API_URL}${separator}count=288&_=${cacheBuster}`;
+
+                const response = await fetch(fullFetchUrl, {
                     method: 'GET',
                     headers: {
                         'Cache-Control': 'no-cache, no-store, must-revalidate',
@@ -339,25 +349,32 @@
                 });
 
                 if (!response.ok) {
+                    if (response.status === 404) {
+                        throw new Error("404 (Endpoint non trovato)");
+                    }
                     throw new Error(`HTTP ${response.status}`);
                 }
 
                 const data = await response.json();
 
-                if (!Array.isArray(data) || data.length === 0) {
-                    throw new Error("Nessun dato dall'API");
+                if (!data || (Array.isArray(data) && data.length === 0)) {
+                    throw new Error("Nessun dato");
                 }
 
-                bgHistory = data.map(item => {
-                    let date = new Date(item.date || item.dateString);
+                const list = Array.isArray(data) ? data : [data];
+
+                bgHistory = list.map(item => {
+                    let date = new Date(item.date || item.dateString || Date.now());
                     let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
                     let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
                     let trendWord = "FLAT";
                     if (item.direction && item.direction.includes("Up")) trendWord = "UP";
                     if (item.direction && item.direction.includes("Down")) trendWord = "DOWN";
 
-                    return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord, rawDate: date };
-                }).reverse();
+                    return { date: dateStr, time: timeStr, value: item.sgv || item.glucose || item.val, trend: trendWord, rawDate: date };
+                }).filter(i => i.value !== undefined).reverse();
+
+                if (bgHistory.length === 0) throw new Error("Formato dati errato");
 
                 localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
 
@@ -373,7 +390,6 @@
                 syncLabel.innerText = `Errore: ${err.message}`;
                 syncLabel.className = "text-xs text-red-400 font-mono font-bold";
 
-                // Se abbiamo dati locali, usiamoli ma segnaliamo l'errore
                 const localData = localStorage.getItem('dig_bgHistory');
                 if (localData) {
                     try {
@@ -741,14 +757,13 @@
         updateTimers();
         setInterval(updateTimers, 60000);
 
-        // Service worker corretto (non blocca le chiamate API)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 const swCode = `
                     self.addEventListener('install', (e) => self.skipWaiting());
                     self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
                     self.addEventListener('fetch', (e) => {
-                        if (e.request.url.includes('/api/')) return; // Bypassa il SW per le chiamate API
+                        if (e.request.url.includes('/api/')) return;
                         e.respondWith(fetch(e.request).catch(() => new Response("Offline")));
                     });
                 `;
