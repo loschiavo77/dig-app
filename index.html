@@ -80,14 +80,29 @@
                     <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Scadenza Sensore</span>
                     <span id="sensor-timer" class="text-sm font-black text-emerald-400 font-mono block mt-1">--</span>
                 </div>
-                <button onclick="promptManualTimer('sensor')" class="text-[9px] text-slate-400 hover:text-slate-200 mt-2 bg-slate-950 border border-slate-800 py-1.5 rounded font-bold">Modifica</button>
+                <div class="flex gap-1 mt-2">
+                    <button onclick="resetTimerQuick('sensor', 7)" class="flex-1 text-[9px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/60 py-1.5 rounded font-bold hover:bg-emerald-900/50">
+                        +7 Giorni
+                    </button>
+                    <button onclick="promptManualTimer('sensor')" class="text-[9px] text-slate-400 bg-slate-950 border border-slate-800 px-2 py-1.5 rounded font-bold hover:text-slate-200">
+                        ⚙️
+                    </button>
+                </div>
             </div>
+
             <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 text-center flex flex-col justify-between">
                 <div>
                     <span class="text-[10px] uppercase font-bold text-slate-500 tracking-wider block">Scadenza Set</span>
                     <span id="set-timer" class="text-sm font-black text-emerald-400 font-mono block mt-1">--</span>
                 </div>
-                <button onclick="promptManualTimer('set')" class="text-[9px] text-slate-400 hover:text-slate-200 mt-2 bg-slate-950 border border-slate-800 py-1.5 rounded font-bold">Modifica</button>
+                <div class="flex gap-1 mt-2">
+                    <button onclick="resetTimerQuick('set', 3)" class="flex-1 text-[9px] text-emerald-400 bg-emerald-950/40 border border-emerald-800/60 py-1.5 rounded font-bold hover:bg-emerald-900/50">
+                        +3 Giorni
+                    </button>
+                    <button onclick="promptManualTimer('set')" class="text-[9px] text-slate-400 bg-slate-950 border border-slate-800 px-2 py-1.5 rounded font-bold hover:text-slate-200">
+                        ⚙️
+                    </button>
+                </div>
             </div>
         </div>
     </div>
@@ -139,10 +154,24 @@
             savedChat = []; 
         }
 
-        // Richiesta permessi notifiche smartphone
+        function playAudioBeep(freq = 880, type = 'sine', duration = 0.3) {
+            try {
+                const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.type = type;
+                osc.frequency.value = freq;
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) { console.log("Audio non supportato"); }
+        }
+
         function requestNotificationPermission() {
             if (!("Notification" in window)) {
-                alert("Questo browser non supporta le notifiche di sistema.");
+                alert("Questa WebView/Browser non supporta le notifiche di sistema. DIG userà gli allarmi audio/vocali automatici.");
                 return;
             }
             Notification.requestPermission().then(permission => {
@@ -167,9 +196,11 @@
         }
 
         function sendPushNotification(title, body) {
-            // Limite anti-spam: invia una notifica push al massimo ogni 15 minuti
             const now = Date.now();
             if (now - lastNotifiedTime < 15 * 60 * 1000 && title !== "DIG Attivo") return;
+
+            playAudioBeep(660, 'sawtooth', 0.4);
+            setTimeout(() => playAudioBeep(880, 'sawtooth', 0.4), 450);
 
             if ("Notification" in window && Notification.permission === "granted") {
                 if (navigator.serviceWorker && navigator.serviceWorker.controller) {
@@ -177,14 +208,14 @@
                         registration.showNotification(title, {
                             body: body,
                             icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🩸</text></svg>',
-                            vibrate: [200, 100, 200]
+                            vibrate: [300, 100, 300, 100, 300]
                         });
                     });
                 } else {
                     new Notification(title, { body: body });
                 }
-                lastNotifiedTime = now;
             }
+            lastNotifiedTime = now;
         }
 
         function toggleAudioOutput() {
@@ -311,7 +342,6 @@
             if (bgHistory.length < 4) return;
             const current = bgHistory[bgHistory.length - 1].value;
             
-            // Allarme Reale (Fuori dal TIR)
             if (current < 70) {
                 const msg = `ATTENZIONE: IPOGLICEMIA A ${current} mg/dL!`;
                 triggerAlert(msg);
@@ -324,7 +354,6 @@
                 silenceAlarm();
             }
 
-            // Allarme Predittivo (Stima prossimi 15 min)
             const p1 = bgHistory[bgHistory.length - 1].value;
             const p4 = bgHistory[bgHistory.length - 4].value;
             const delta15min = p1 - p4;
@@ -498,8 +527,16 @@
             }
         }
 
+        function resetTimerQuick(type, defaultDays) {
+            const msDays = defaultDays * 24 * 60 * 60 * 1000;
+            const expirationTime = Date.now() + msDays;
+            
+            localStorage.setItem(`dig_expire_${type}`, expirationTime);
+            updateTimers();
+        }
+
         function promptManualTimer(type) {
-            const inputGiorni = prompt(`[${type.toUpperCase()}] Quanti GIORNI deve durare?`, type === 'sensor' ? "10" : "3");
+            const inputGiorni = prompt(`[${type.toUpperCase()}] Quanti GIORNI deve durare?`, type === 'sensor' ? "7" : "3");
             if (inputGiorni === null) return;
             
             const inputOre = prompt(`[${type.toUpperCase()}] Quante ORE aggiuntive?`, "0");
