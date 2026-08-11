@@ -51,7 +51,7 @@
     <div id="tab-archive" class="tab-content justify-between">
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-4 flex flex-col h-[68vh]">
             <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 mb-3 pb-1 border-b border-slate-800">
-                Archivio Storico Glicemie (fino a 14 Giorni)
+                Archivio Storico Glicemie
             </h3>
             <div id="archive-list" class="flex-grow overflow-y-auto space-y-4 pr-1">
                 <div class="text-slate-500 text-xs italic text-center py-4">Caricamento dati storici...</div>
@@ -160,11 +160,9 @@
 
         try {
             savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
-        } catch(e) { 
-            savedChat = []; 
-        }
+        } catch(e) { savedChat = []; }
 
-        // --- SISTEMA AUDIO ROBUSTO ---
+        // --- SISTEMA AUDIO ---
         function playAudioBeep(freq = 880, type = 'sine', duration = 0.3) {
             try {
                 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -206,7 +204,6 @@
             }
         }
 
-        // --- NOTIFICA CON PROTEZIONE ERRORI PER CHROME/PWA ---
         function sendPushNotification(title, body) {
             const now = Date.now();
             if (now - lastNotifiedTime < 15 * 60 * 1000 && title !== "DIG Attivo") return;
@@ -228,7 +225,7 @@
                     }
                 }
             } catch (e) {
-                console.warn("Notifiche non supportate o bloccate in questo contesto:", e);
+                console.warn("Notifiche non gestibili:", e);
             }
 
             lastNotifiedTime = now;
@@ -267,7 +264,7 @@
         }
 
         if ('speechSynthesis' in window) {
-            window.speechSynthesis.onvoiceschanged = () => { console.log("Voci caricate"); };
+            window.speechSynthesis.onvoiceschanged = () => { console.log("Voci pronte"); };
         }
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -295,7 +292,7 @@
         }
 
         function toggleVoiceInput() {
-            if (!recognition) { alert("Il comando vocale non è supportato su questo dispositivo."); return; }
+            if (!recognition) { alert("Comando vocale non disponibile."); return; }
             if (isListening) recognition.stop(); else recognition.start();
         }
 
@@ -325,11 +322,21 @@
             }
         }
 
-        // --- FETCH CARELINK / NIGHTSCOUT PROTETTO ---
+        // --- FETCH CARELINK / NIGHTSCOUT (ANTI-CACHE + NO FREEZE) ---
         async function fetchCareLinkData() {
             document.getElementById('last-sync').innerText = "Sync...";
             try {
-                const response = await fetch('/api/v1/entries.json?count=4032');
+                const cacheBuster = Date.now();
+                const response = await fetch(`/api/v1/entries.json?count=288&_=${cacheBuster}`, {
+                    cache: 'no-store',
+                    headers: {
+                        'Cache-Control': 'no-cache, no-store, must-revalidate',
+                        'Pragma': 'no-cache'
+                    }
+                });
+                
+                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                
                 const data = await response.json();
                 
                 if (data && data.length > 0) {
@@ -353,7 +360,7 @@
                     document.getElementById('last-sync').innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
                 }
             } catch (err) {
-                // FALLBACK SU DATI MEMORIZZATI LOCALE PER EVITARE SCHERMO BIANCO
+                console.warn("Sync rete fallito, uso storage locale:", err);
                 const localData = localStorage.getItem('dig_bgHistory');
                 if (localData) {
                     try {
@@ -362,20 +369,19 @@
                         updateUI();
                         document.getElementById('last-sync').innerText = "Dati Locali";
                     } catch(e) {
-                        document.getElementById('last-sync').innerText = "In attesa...";
+                        document.getElementById('last-sync').innerText = "Errore Sync";
                     }
                 } else {
-                    document.getElementById('last-sync').innerText = "In attesa...";
+                    document.getElementById('last-sync').innerText = "Errore Sync";
                 }
             }
         }
 
-        // --- CONTROLLO ALLARMI SICURO (NON BLOCA IL DISPLAY) ---
+        // --- CONTROLLO ALLARMI ---
         function checkRealtimeAndPredictiveAlerts() {
             if (!bgHistory || bgHistory.length === 0) return;
             const current = bgHistory[bgHistory.length - 1].value;
             
-            // 1. Allarme in tempo reale
             if (current < 70) {
                 const msg = `ATTENZIONE: IPOGLICEMIA A ${current} mg/dL!`;
                 triggerAlert(msg);
@@ -388,7 +394,6 @@
                 silenceAlarm();
             }
 
-            // 2. Allarme predittivo
             if (bgHistory.length >= 4) {
                 try {
                     const p1 = bgHistory[bgHistory.length - 1].value;
@@ -410,13 +415,11 @@
                     } else {
                         predictiveBox.classList.add('hidden');
                     }
-                } catch(e) {
-                    console.log("Errore calcolo predittivo ignorato:", e);
-                }
+                } catch(e) {}
             }
         }
 
-        // --- RENDER INTERFACCIA E GRAFICO CARELINK ---
+        // --- RENDER INTERFACCIA E GRAFICO ---
         function updateUI() {
             if (!bgHistory || bgHistory.length === 0) return;
             const current = bgHistory[bgHistory.length - 1];
@@ -468,13 +471,13 @@
                 archiveList.innerHTML += groupHTML;
             }
 
-            // GRAFICO CARELINK CON SCROLL
+            // GRAFICO CARELINK
             const ctx = document.getElementById('bgChart').getContext('2d');
             const labels = bgHistory.map(item => item.time);
             const values = bgHistory.map(item => item.value);
 
             const totalPoints = labels.length;
-            const defaultSpan = 48; // Ultimi 48 punti (~4 ore)
+            const defaultSpan = 48;
             const minIndex = Math.max(0, totalPoints - defaultSpan);
             const maxIndex = totalPoints - 1;
 
@@ -543,9 +546,7 @@
                                     enabled: true,
                                     mode: 'x',
                                     threshold: 2,
-                                    onPanStart: () => {
-                                        hasUserScrolled = true;
-                                    }
+                                    onPanStart: () => { hasUserScrolled = true; }
                                 }
                             }
                         }
@@ -576,28 +577,22 @@
         // --- TIMER HARDWARE ---
         function resetTimerQuick(type, defaultDays) {
             const msDays = defaultDays * 24 * 60 * 60 * 1000;
-            const expirationTime = Date.now() + msDays;
-            localStorage.setItem(`dig_expire_${type}`, expirationTime);
+            localStorage.setItem(`dig_expire_${type}`, Date.now() + msDays);
             updateTimers();
         }
 
         function promptManualTimer(type) {
             const inputGiorni = prompt(`[${type.toUpperCase()}] Quanti GIORNI deve durare?`, type === 'sensor' ? "7" : "3");
             if (inputGiorni === null) return;
-            
             const inputOre = prompt(`[${type.toUpperCase()}] Quante ORE aggiuntive?`, "0");
             if (inputOre === null) return;
 
             const giorni = parseFloat(inputGiorni) || 0;
             const ore = parseFloat(inputOre) || 0;
-
             if (giorni < 0 || ore < 0 || (giorni === 0 && ore === 0)) return;
 
-            const msGiorni = giorni * 24 * 60 * 60 * 1000;
-            const msOre = ore * 60 * 60 * 1000;
-            const expirationTime = Date.now() + msGiorni + msOre;
-
-            localStorage.setItem(`dig_expire_${type}`, expirationTime);
+            const ms = (giorni * 24 * 60 * 60 * 1000) + (ore * 60 * 60 * 1000);
+            localStorage.setItem(`dig_expire_${type}`, Date.now() + ms);
             updateTimers();
         }
 
@@ -648,7 +643,7 @@
         }
 
         function clearChatMemory() {
-            if(confirm("Vuoi cancellare definitivamente tutta la cronologia della chat?")) {
+            if(confirm("Vuoi cancellare la cronologia della chat?")) {
                 localStorage.removeItem('dig_chat_history');
                 savedChat = [];
                 renderSavedChat();
@@ -680,12 +675,10 @@
                 content: "Tu sei DIG, un assistente intelligenza guida per il diabete. Sii estremamente sintetico, preciso e rispondi in pochissime battute prendendo spunto dai messaggi passati della chat se utili. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'."
             };
 
-            const messaggiPerServer = savedChat.map(msg => {
-                return {
-                    role: msg.type === 'user' ? 'user' : 'assistant',
-                    content: msg.text
-                };
-            });
+            const messaggiPerServer = savedChat.map(msg => ({
+                role: msg.type === 'user' ? 'user' : 'assistant',
+                content: msg.text
+            }));
 
             const chatHistoryCompleta = [istruzioniComportamento, ...messaggiPerServer];
 
@@ -721,7 +714,7 @@
                 const typingEl = document.getElementById(typingId);
                 if(typingEl) typingEl.remove();
                 
-                const errorReply = "Ops! Non sono riuscito a connettermi al server. Verifica la connessione o l'API key.";
+                const errorReply = "Ops! Non sono riuscito a connettermi al server.";
                 chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
                 
                 savedChat.push({ type: 'error', text: errorReply });
@@ -732,7 +725,7 @@
             }
         }
 
-        // --- INIZIALIZZAZIONE ---
+        // --- AVVIO APP ---
         renderSavedChat();
         updateNotificationBtnUI();
         fetchCareLinkData();
@@ -745,9 +738,7 @@
                 const swCode = `
                     self.addEventListener('install', (e) => self.skipWaiting());
                     self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-                    self.addEventListener('fetch', (e) => {
-                        e.respondWith(fetch(e.request).catch(() => new Response("Offline")));
-                    });
+                    self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request).catch(() => new Response("Offline"))));
                 `;
                 const blob = new Blob([swCode], { type: 'application/javascript' });
                 navigator.serviceWorker.register(URL.createObjectURL(blob), { scope: '/' })
