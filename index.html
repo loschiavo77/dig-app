@@ -31,7 +31,12 @@
 
     <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
         <h1 class="text-2xl font-black text-emerald-400 tracking-wider">D.I.G.</h1>
-        <span id="last-sync" class="text-xs text-slate-500 font-mono">In attesa...</span>
+        <div class="flex items-center gap-2">
+            <button id="notif-perm-btn" onclick="requestNotificationPermission()" class="text-[9px] font-mono px-2 py-0.5 rounded border border-slate-700 bg-slate-950 text-slate-400 font-bold">
+                Notifiche: OFF
+            </button>
+            <span id="last-sync" class="text-xs text-slate-500 font-mono">In attesa...</span>
+        </div>
     </div>
 
     <div id="tab-archive" class="tab-content justify-between">
@@ -125,12 +130,61 @@
         
         let isAudioEnabled = false;
         let savedChat = [];
-        let hasUserScrolled = false; // Flag per evitare di resettare la posizione dello scroll se l'utente sta navigando indietro
+        let hasUserScrolled = false;
+        let lastNotifiedTime = 0;
 
         try {
             savedChat = JSON.parse(localStorage.getItem('dig_chat_history')) || [];
         } catch(e) { 
             savedChat = []; 
+        }
+
+        // Richiesta permessi notifiche smartphone
+        function requestNotificationPermission() {
+            if (!("Notification" in window)) {
+                alert("Questo browser non supporta le notifiche di sistema.");
+                return;
+            }
+            Notification.requestPermission().then(permission => {
+                updateNotificationBtnUI();
+                if (permission === "granted") {
+                    sendPushNotification("DIG Attivo", "Le notifiche per gli allarmi glicemici sono attive.");
+                }
+            });
+        }
+
+        function updateNotificationBtnUI() {
+            const btn = document.getElementById('notif-perm-btn');
+            if ("Notification" in window && Notification.permission === "granted") {
+                btn.innerText = "Notifiche: ON";
+                btn.classList.remove('text-slate-400', 'border-slate-700', 'bg-slate-950');
+                btn.classList.add('text-emerald-400', 'border-emerald-500', 'bg-emerald-950/30');
+            } else {
+                btn.innerText = "Notifiche: OFF";
+                btn.classList.remove('text-emerald-400', 'border-emerald-500', 'bg-emerald-950/30');
+                btn.classList.add('text-slate-400', 'border-slate-700', 'bg-slate-950');
+            }
+        }
+
+        function sendPushNotification(title, body) {
+            // Limite anti-spam: invia una notifica push al massimo ogni 15 minuti
+            const now = Date.now();
+            if (now - lastNotifiedTime < 15 * 60 * 1000 && title !== "DIG Attivo") return;
+
+            if ("Notification" in window && Notification.permission === "granted") {
+                if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+                    navigator.serviceWorker.ready.then(registration => {
+                        registration.showNotification(title, {
+                            body: body,
+                            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🩸</text></svg>',
+                            vibrate: [200, 100, 200]
+                        });
+                    });
+                } else {
+                    new Notification(title, { body: body });
+                }
+                lastNotifiedTime = now;
+            }
         }
 
         function toggleAudioOutput() {
@@ -209,13 +263,12 @@
                 window.event.target.classList.add('text-emerald-400');
             }
 
-            // Quando si torna sulla Home, reimposta la vista focalizzata sull'ora corrente (tutto a destra)
             if (tabName === 'home' && chartInstance) {
                 setTimeout(() => {
                     hasUserScrolled = false;
                     const totalPoints = chartInstance.data.labels.length;
                     if (totalPoints > 0) {
-                        chartInstance.scales.x.options.min = Math.max(0, totalPoints - 48); // Finestra iniziale di 4 ore
+                        chartInstance.scales.x.options.min = Math.max(0, totalPoints - 48);
                         chartInstance.scales.x.options.max = totalPoints - 1;
                         chartInstance.update('none');
                     }
@@ -258,10 +311,20 @@
             if (bgHistory.length < 4) return;
             const current = bgHistory[bgHistory.length - 1].value;
             
-            if (current < 70) triggerAlert(`IMMEDIATO: IPOGLICEMIA REALE A ${current} mg/dL!`);
-            else if (current > 180) triggerAlert(`IMMEDIATO: IPERGLICEMIA REALE A ${current} mg/dL!`);
-            else silenceAlarm();
+            // Allarme Reale (Fuori dal TIR)
+            if (current < 70) {
+                const msg = `ATTENZIONE: IPOGLICEMIA A ${current} mg/dL!`;
+                triggerAlert(msg);
+                sendPushNotification("⚠️ IPOGLICEMIA", msg);
+            } else if (current > 180) {
+                const msg = `ATTENZIONE: IPERGLICEMIA A ${current} mg/dL!`;
+                triggerAlert(msg);
+                sendPushNotification("⚠️ IPERGLICEMIA", msg);
+            } else {
+                silenceAlarm();
+            }
 
+            // Allarme Predittivo (Stima prossimi 15 min)
             const p1 = bgHistory[bgHistory.length - 1].value;
             const p4 = bgHistory[bgHistory.length - 4].value;
             const delta15min = p1 - p4;
@@ -269,11 +332,15 @@
 
             const predictiveBox = document.getElementById('predictive-alert-box');
             if (stimaProssimi15min < 70 && current >= 70) {
-                predictiveBox.innerText = `PREDISPOSIZIONE IPO: Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
+                const msg = `Tendenza in rapida discesa. Rischio ipoglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
+                predictiveBox.innerText = `PREDISPOSIZIONE IPO: ${msg}`;
                 predictiveBox.classList.remove('hidden');
+                sendPushNotification("🔻 PREVISIONE IPO", msg);
             } else if (stimaProssimi15min > 180 && current <= 180) {
-                predictiveBox.innerText = `PREDISPOSIZIONE IPER: Tendenza in rapida salita. Rischio iperglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
+                const msg = `Tendenza in rapida salita. Rischio iperglicemia stimato (~${Math.round(stimaProssimi15min)} mg/dL) tra 15 min.`;
+                predictiveBox.innerText = `PREDISPOSIZIONE IPER: ${msg}`;
                 predictiveBox.classList.remove('hidden');
+                sendPushNotification("🔺 PREVISIONE IPER", msg);
             } else {
                 predictiveBox.classList.add('hidden');
             }
@@ -330,14 +397,12 @@
             }
 
             const ctx = document.getElementById('bgChart').getContext('2d');
-            
-            // STATO MODIFICATO: Estraiamo esattamente 288 letture (= 24 ore a intervalli di 5 min)
             const recentHistory = bgHistory.slice(-288); 
             const labels = recentHistory.map(item => item.time);
             const values = recentHistory.map(item => item.value);
 
             const totalPoints = labels.length;
-            const defaultSpan = 48; // Finestra visibile predefinita di 4 ore per mantenere i punti grandi e chiari
+            const defaultSpan = 48;
             const minIndex = Math.max(0, totalPoints - defaultSpan);
             const maxIndex = totalPoints - 1;
 
@@ -346,7 +411,6 @@
                 chartInstance.data.datasets[0].data = values;
                 chartInstance.data.datasets[0].pointBackgroundColor = values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#10b981');
                 
-                // Aggiorna la posizione a destra solo se l'utente non ha iniziato a scorrere manualmente verso sinistra
                 if (!hasUserScrolled) {
                     chartInstance.scales.x.options.min = minIndex;
                     chartInstance.scales.x.options.max = maxIndex;
@@ -408,7 +472,6 @@
                                     mode: 'x',
                                     threshold: 5,
                                     onPanStart: () => {
-                                        // Intercetta l'azione di scroll dell'utente per evitare il reset automatico al successivo refresh
                                         hasUserScrolled = true;
                                     }
                                 }
@@ -586,6 +649,7 @@
         }
 
         renderSavedChat();
+        updateNotificationBtnUI();
         fetchCareLinkData();
         setInterval(fetchCareLinkData, 60000);
         updateTimers();
