@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="it">
 <head>
@@ -175,7 +176,7 @@
                 gain.connect(audioCtx.destination);
                 osc.start();
                 osc.stop(audioCtx.currentTime + duration);
-            } catch(e) { console.log("Audio non disponibile"); }
+            } catch(e) {}
         }
 
         function requestNotificationPermission() {
@@ -190,7 +191,7 @@
                         sendPushNotification("DIG Attivo", "Le notifiche sono attive.");
                     }
                 }).catch(err => console.log("Permesso notifiche errore:", err));
-            } catch(e) { console.log(e); }
+            } catch(e) {}
         }
 
         function updateNotificationBtnUI() {
@@ -224,9 +225,7 @@
                         new Notification(title, { body: body });
                     }
                 }
-            } catch (e) {
-                console.warn("Notifiche non gestibili:", e);
-            }
+            } catch (e) {}
 
             lastNotifiedTime = now;
         }
@@ -264,7 +263,7 @@
         }
 
         if ('speechSynthesis' in window) {
-            window.speechSynthesis.onvoiceschanged = () => { console.log("Voci pronte"); };
+            window.speechSynthesis.onvoiceschanged = () => {};
         }
 
         if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
@@ -322,57 +321,66 @@
             }
         }
 
-        // --- FETCH CARELINK / NIGHTSCOUT (ANTI-CACHE + NO FREEZE) ---
+        // --- FETCH CARELINK / NIGHTSCOUT (DIAGNOSTICA E FIX REALE) ---
         async function fetchCareLinkData() {
-            document.getElementById('last-sync').innerText = "Sync...";
+            const syncLabel = document.getElementById('last-sync');
+            syncLabel.innerText = "Sync...";
+            syncLabel.className = "text-xs text-slate-500 font-mono";
+
             try {
                 const cacheBuster = Date.now();
                 const response = await fetch(`/api/v1/entries.json?count=288&_=${cacheBuster}`, {
-                    cache: 'no-store',
+                    method: 'GET',
                     headers: {
                         'Cache-Control': 'no-cache, no-store, must-revalidate',
-                        'Pragma': 'no-cache'
+                        'Pragma': 'no-cache',
+                        'Accept': 'application/json'
                     }
                 });
-                
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                
-                const data = await response.json();
-                
-                if (data && data.length > 0) {
-                    bgHistory = data.map(item => {
-                        let date = new Date(item.date || item.dateString);
-                        let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
-                        let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-                        let trendWord = "FLAT";
-                        if (item.direction && item.direction.includes("Up")) trendWord = "UP";
-                        if (item.direction && item.direction.includes("Down")) trendWord = "DOWN";
-                        
-                        return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord, rawDate: date };
-                    }).reverse();
 
-                    localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
-                    
-                    checkRealtimeAndPredictiveAlerts();
-                    updateUI();
-                    
-                    let oraAttuale = new Date();
-                    document.getElementById('last-sync').innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
                 }
+
+                const data = await response.json();
+
+                if (!Array.isArray(data) || data.length === 0) {
+                    throw new Error("Nessun dato dall'API");
+                }
+
+                bgHistory = data.map(item => {
+                    let date = new Date(item.date || item.dateString);
+                    let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
+                    let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+                    let trendWord = "FLAT";
+                    if (item.direction && item.direction.includes("Up")) trendWord = "UP";
+                    if (item.direction && item.direction.includes("Down")) trendWord = "DOWN";
+
+                    return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord, rawDate: date };
+                }).reverse();
+
+                localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
+
+                checkRealtimeAndPredictiveAlerts();
+                updateUI();
+
+                let oraAttuale = new Date();
+                syncLabel.innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
+                syncLabel.className = "text-xs text-emerald-400 font-mono";
+
             } catch (err) {
-                console.warn("Sync rete fallito, uso storage locale:", err);
+                console.error("Errore Sync:", err);
+                syncLabel.innerText = `Errore: ${err.message}`;
+                syncLabel.className = "text-xs text-red-400 font-mono font-bold";
+
+                // Se abbiamo dati locali, usiamoli ma segnaliamo l'errore
                 const localData = localStorage.getItem('dig_bgHistory');
                 if (localData) {
                     try {
                         bgHistory = JSON.parse(localData);
                         checkRealtimeAndPredictiveAlerts();
                         updateUI();
-                        document.getElementById('last-sync').innerText = "Dati Locali";
-                    } catch(e) {
-                        document.getElementById('last-sync').innerText = "Errore Sync";
-                    }
-                } else {
-                    document.getElementById('last-sync').innerText = "Errore Sync";
+                    } catch(e) {}
                 }
             }
         }
@@ -733,12 +741,16 @@
         updateTimers();
         setInterval(updateTimers, 60000);
 
+        // Service worker corretto (non blocca le chiamate API)
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 const swCode = `
                     self.addEventListener('install', (e) => self.skipWaiting());
                     self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-                    self.addEventListener('fetch', (e) => e.respondWith(fetch(e.request).catch(() => new Response("Offline"))));
+                    self.addEventListener('fetch', (e) => {
+                        if (e.request.url.includes('/api/')) return; // Bypassa il SW per le chiamate API
+                        e.respondWith(fetch(e.request).catch(() => new Response("Offline")));
+                    });
                 `;
                 const blob = new Blob([swCode], { type: 'application/javascript' });
                 navigator.serviceWorker.register(URL.createObjectURL(blob), { scope: '/' })
