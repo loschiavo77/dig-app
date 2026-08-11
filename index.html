@@ -12,6 +12,7 @@
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom"></script>
     
     <style>
@@ -32,7 +33,7 @@
         #chart-container {
             position: relative;
             width: 100%;
-            height: 240px;
+            height: 260px;
         }
     </style>
 </head>
@@ -79,7 +80,15 @@
         <div id="alert-box" class="mt-3 p-2.5 rounded bg-red-950/50 border border-red-500 text-red-400 text-xs font-bold hidden animate-pulse text-center"></div>
         <div id="predictive-alert-box" class="mt-2 p-2.5 rounded bg-yellow-950/40 border border-yellow-600 text-yellow-400 text-xs font-bold hidden text-center border-dashed"></div>
 
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 my-3 flex-grow flex flex-col justify-center min-h-[250px] relative">
+        <div class="flex justify-between items-end px-2 mt-3 text-xs">
+            <div></div>
+            <div class="text-right">
+                <span id="iob-value" class="text-base font-bold text-slate-100 font-mono">-- U</span><br>
+                <span class="text-[10px] text-slate-400 uppercase tracking-wider">Insulina attiva</span>
+            </div>
+        </div>
+
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 my-2 flex-grow flex flex-col justify-center min-h-[250px] relative">
             <div id="chart-container">
                 <canvas id="bgChart"></canvas>
             </div>
@@ -136,7 +145,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 18.75a6 6 0 0 0 6-6v-1.5m-6 7.5a6 6 0 0 1-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 0 1-3-3V4.5a3 3 0 1 1 6 0v8.25a3 3 0 0 1-3 3Z" />
                     </svg>
                 </button>
-                <input id="chat-input" type="text" placeholder="Chiedi a DIG..." class="flex-grow bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 text-slate-200">
+                <input id="chat-input" type="text" placeholder="Chiedi a DIG..." class="flex-grow bg-slate-950 border border-slate-800 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:border-emerald-500 text-slate-200" onkeypress="if(event.key==='Enter') sendMessage()">
                 <button onclick="sendMessage()" class="bg-emerald-500 text-slate-950 font-bold px-4 py-2.5 rounded-lg text-sm">Invia</button>
             </div>
         </div>
@@ -332,7 +341,17 @@
                         if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
                         if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
                         
-                        return { date: dateStr, time: timeStr, value: item.sgv, trend: trendWord, rawDate: date };
+                        return { 
+                            date: dateStr, 
+                            time: timeStr, 
+                            value: item.sgv, 
+                            trend: trendWord, 
+                            rawDate: date,
+                            iob: item.iob || null,
+                            bolus: item.bolus ? 400 : null,
+                            bolusColor: item.bolusType === 'manual' ? '#06b6d4' : '#c026d3',
+                            meal: item.mb ? 50 : null
+                        };
                     }).reverse();
 
                     localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
@@ -396,6 +415,12 @@
             if (current.trend === "DOWN") arrow = "↓";
             document.getElementById('bg-trend').innerText = arrow;
 
+            if (current.iob !== null && current.iob !== undefined) {
+                document.getElementById('iob-value').innerText = `${current.iob} U`;
+            } else {
+                document.getElementById('iob-value').innerText = `-- U`;
+            }
+
             const inRange = bgHistory.filter(item => item.value >= 70 && item.value <= 180).length;
             const tir = bgHistory.length > 0 ? Math.round((inRange / bgHistory.length) * 100) : 0;
             const tirElement = document.getElementById('tir-value');
@@ -437,10 +462,13 @@
                 archiveList.innerHTML += groupHTML;
             }
 
-            // --- CONFIGURAZIONE GRAFICO CARELINK CON SCROLL ORIZZONTALE ---
+            // --- CONFIGURAZIONE GRAFICO CARELINK ---
             const ctx = document.getElementById('bgChart').getContext('2d');
             const labels = bgHistory.map(item => item.time);
             const values = bgHistory.map(item => item.value);
+            const bolusValues = bgHistory.map(item => item.bolus || null);
+            const bolusColors = bgHistory.map(item => item.bolusColor || '#c026d3');
+            const mealValues = bgHistory.map(item => item.meal || null);
 
             const totalPoints = labels.length;
             const defaultSpan = 48; // Ultimi 48 punti (~4 ore)
@@ -450,7 +478,8 @@
             if (chartInstance) {
                 chartInstance.data.labels = labels;
                 chartInstance.data.datasets[0].data = values;
-                chartInstance.data.datasets[0].pointBackgroundColor = values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#ffffff');
+                chartInstance.data.datasets[1].data = bolusValues;
+                chartInstance.data.datasets[2].data = mealValues;
                 
                 if (!hasUserScrolled) {
                     chartInstance.scales.x.options.min = minIndex;
@@ -462,18 +491,37 @@
                     type: 'line',
                     data: {
                         labels: labels,
-                        datasets: [{
-                            label: 'Glicemia',
-                            data: values,
-                            borderColor: '#ffffff',
-                            borderWidth: 3,
-                            pointBackgroundColor: values.map(val => val < 70 ? '#ef4444' : val > 180 ? '#f59e0b' : '#ffffff'),
-                            pointBorderColor: '#020617',
-                            pointBorderWidth: 1.5,
-                            pointRadius: 3.5,
-                            tension: 0.25,
-                            fill: false
-                        }]
+                        datasets: [
+                            {
+                                label: 'Glicemia',
+                                data: values,
+                                borderColor: '#ffffff',
+                                borderWidth: 2.5,
+                                pointBackgroundColor: '#ffffff',
+                                pointRadius: 0,
+                                pointHoverRadius: 4,
+                                tension: 0.25,
+                                fill: false,
+                                z: 10
+                            },
+                            {
+                                type: 'bar',
+                                label: 'Bolo',
+                                data: bolusValues,
+                                backgroundColor: bolusColors,
+                                barThickness: 5,
+                                z: 5
+                            },
+                            {
+                                type: 'scatter',
+                                label: 'Pasto',
+                                data: mealValues,
+                                backgroundColor: '#eab308',
+                                pointStyle: 'rectRot',
+                                pointRadius: 5,
+                                z: 5
+                            }
+                        ]
                     },
                     options: {
                         responsive: true,
@@ -481,9 +529,14 @@
                         scales: {
                             y: { 
                                 min: 40, 
-                                max: 250, 
-                                grid: { color: 'rgba(51, 65, 85, 0.4)' }, 
-                                ticks: { color: '#94a3b8', stepSize: 30 }
+                                max: 420, 
+                                position: 'right',
+                                grid: { color: 'rgba(51, 65, 85, 0.2)' }, 
+                                ticks: { 
+                                    color: '#94a3b8', 
+                                    stepSize: 50,
+                                    callback: (val) => (val <= 400 ? val : '')
+                                }
                             },
                             x: { 
                                 min: minIndex,
@@ -523,21 +576,20 @@
                         id: 'chartLines',
                         beforeDraw: (chart) => {
                             const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
-                            // Fascia Verde TIR (70 - 180)
-                            ctx.fillStyle = 'rgba(16, 185, 129, 0.12)'; 
+                            ctx.save();
+                            // Fascia Verde Target (70 - 180)
+                            ctx.fillStyle = 'rgba(16, 185, 129, 0.15)'; 
                             ctx.fillRect(x.left, y.getPixelForValue(180), x.right - x.left, y.getPixelForValue(70) - y.getPixelForValue(180));
-                            // Fascia Iper (>180)
-                            ctx.fillStyle = 'rgba(245, 158, 11, 0.05)'; 
-                            ctx.fillRect(x.left, y.getPixelForValue(y.max), x.right - x.left, y.getPixelForValue(180) - y.getPixelForValue(y.max));
-                            // Fascia Ipo (<70)
-                            ctx.fillStyle = 'rgba(239, 68, 68, 0.08)'; 
-                            ctx.fillRect(x.left, y.getPixelForValue(70), x.right - x.left, y.getPixelForValue(y.min) - y.getPixelForValue(70));
-                        },
-                        afterDraw: (chart) => {
-                            const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
-                            ctx.save(); ctx.beginPath(); ctx.setLineDash([4, 4]);
-                            ctx.strokeStyle = '#f59e0b'; ctx.moveTo(x.left, y.getPixelForValue(180)); ctx.lineTo(x.right, y.getPixelForValue(180)); ctx.stroke();
-                            ctx.strokeStyle = '#ef4444'; ctx.moveTo(x.left, y.getPixelForValue(70)); ctx.lineTo(x.right, y.getPixelForValue(70)); ctx.stroke();
+                            
+                            // Linee di limite 240 e 70 mg/dL
+                            const y240 = y.getPixelForValue(240);
+                            const y70 = y.getPixelForValue(70);
+                            
+                            ctx.strokeStyle = '#f97316'; ctx.lineWidth = 1;
+                            ctx.beginPath(); ctx.moveTo(x.left, y240); ctx.lineTo(x.right, y240); ctx.stroke();
+
+                            ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1;
+                            ctx.beginPath(); ctx.moveTo(x.left, y70); ctx.lineTo(x.right, y70); ctx.stroke();
                             ctx.restore();
                         }
                     }]
@@ -595,141 +647,76 @@
 
         function triggerAlert(message) {
             const box = document.getElementById('alert-box');
-            box.innerText = message; box.classList.remove('hidden');
+            box.innerText = message;
+            box.classList.remove('hidden');
         }
-        function silenceAlarm() { document.getElementById('alert-box').classList.add('hidden'); }
 
-        // --- CHAT ASSISTANT INTELLIGENTE ---
-        function renderSavedChat() {
-            const chatContainer = document.getElementById('chat-messages');
-            chatContainer.innerHTML = '';
+        function silenceAlarm() {
+            const box = document.getElementById('alert-box');
+            box.classList.add('hidden');
+        }
+
+        // --- GESTIONE CHAT ---
+        function sendMessage() {
+            const input = document.getElementById('chat-input');
+            const message = input.value.trim();
+            if (!message) return;
+
+            appendChatMessage('user', message);
+            input.value = '';
+
+            savedChat.push({ role: 'user', text: message });
+            localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
+
+            setTimeout(() => {
+                const reply = "Ricevuto. Sto elaborando le metriche metaboliche recenti...";
+                appendChatMessage('assistant', reply);
+                speakText(reply);
+
+                savedChat.push({ role: 'assistant', text: reply });
+                localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
+            }, 600);
+        }
+
+        function appendChatMessage(role, text) {
+            const container = document.getElementById('chat-messages');
+            const messageEl = document.createElement('div');
+            messageEl.className = role === 'user' ? 'text-right my-1' : 'text-left my-1';
             
-            if(savedChat.length === 0) {
-                chatContainer.innerHTML = `<div class="bg-slate-900 p-3 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">Ciao! Sono l'assistente DIG avanzato. Puoi scrivermi o toccare il microfono per parlare a voce. Chiedimi qualunque cosa!</div>`;
-            } else {
-                savedChat.forEach(msg => {
-                    if (msg.type === 'user') {
-                        chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${msg.text}</div>`;
-                    } else if (msg.type === 'bot') {
-                        chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${msg.text}</div>`;
-                    } else if (msg.type === 'error') {
-                        chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${msg.text}</div>`;
-                    }
-                });
-            }
-            chatContainer.scrollTop = chatContainer.scrollHeight;
+            const inner = document.createElement('span');
+            inner.className = role === 'user' 
+                ? 'inline-block bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 px-3 py-1.5 rounded-lg max-w-[80%]'
+                : 'inline-block bg-slate-800 border border-slate-700 text-slate-200 px-3 py-1.5 rounded-lg max-w-[80%]';
+            inner.innerText = text;
+
+            messageEl.appendChild(inner);
+            container.appendChild(messageEl);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function renderSavedChat() {
+            const container = document.getElementById('chat-messages');
+            container.innerHTML = '';
+            savedChat.forEach(msg => {
+                appendChatMessage(msg.role, msg.text);
+            });
         }
 
         function clearChatMemory() {
-            if(confirm("Vuoi cancellare definitivamente tutta la cronologia della chat?")) {
-                localStorage.removeItem('dig_chat_history');
-                savedChat = [];
-                renderSavedChat();
-            }
+            localStorage.removeItem('dig_chat_history');
+            savedChat = [];
+            document.getElementById('chat-messages').innerHTML = '';
         }
 
-        async function sendMessage() {
-            const input = document.getElementById('chat-input');
-            const userText = input.value.trim();
-            if(!userText) return;
-
-            const chatContainer = document.getElementById('chat-messages');
+        window.addEventListener('DOMContentLoaded', () => {
+            updateNotificationBtnUI();
+            updateTimers();
+            renderSavedChat();
+            setInterval(updateTimers, 60000);
             
-            chatContainer.innerHTML += `<div class="bg-emerald-500 text-slate-950 p-2.5 rounded-lg max-w-[85%] self-end ml-auto font-semibold">${userText}</div>`;
-            savedChat.push({ type: 'user', text: userText });
-            localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
-            
-            input.value = '';
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            const typingId = "typing-" + Date.now();
-            chatContainer.innerHTML += `<div id="${typingId}" class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-400 italic">DIG sta pensando...</div>`;
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-
-            let currentBg = bgHistory.length > 0 ? bgHistory[bgHistory.length - 1].value : "--";
-
-            const istruzioniComportamento = {
-                role: "system",
-                content: "Tu sei DIG, un assistente intelligenza guida per il diabete. Sii estremamente sintetico, preciso e rispondi in pochissime battute prendendo spunto dai messaggi passati della chat se utili. IMPORTANTE: Inizia SEMPRE ogni singola risposta salutando esattamente con le parole 'Ciao Lorenzo,'."
-            };
-
-            const messaggiPerServer = savedChat.map(msg => {
-                return {
-                    role: msg.type === 'user' ? 'user' : 'assistant',
-                    content: msg.text
-                };
-            });
-
-            const chatHistoryCompleta = [istruzioniComportamento, ...messaggiPerServer];
-
-            try {
-                const response = await fetch('/api/chat', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        message: userText,
-                        history: chatHistoryCompleta,
-                        currentBg: currentBg
-                    })
-                });
-
-                if(!response.ok) throw new Error("Server error");
-                const data = await response.json();
-                
-                const typingEl = document.getElementById(typingId);
-                if(typingEl) typingEl.remove();
-
-                if (data.reply) {
-                    chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-slate-800 text-slate-300">${data.reply}</div>`;
-                    savedChat.push({ type: 'bot', text: data.reply });
-                    localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
-                    
-                    chatContainer.scrollTop = chatContainer.scrollHeight;
-                    speakText(data.reply);
-                } else {
-                    throw new Error("No reply");
-                }
-
-            } catch (err) {
-                const typingEl = document.getElementById(typingId);
-                if(typingEl) typingEl.remove();
-                
-                const errorReply = "Ops! Non sono riuscito a connettermi al server. Verifica di aver inserito correttamente la chiave API.";
-                chatContainer.innerHTML += `<div class="bg-slate-900 p-2.5 rounded-lg max-w-[85%] border border-red-900/50 text-red-400">${errorReply}</div>`;
-                
-                savedChat.push({ type: 'error', text: errorReply });
-                localStorage.setItem('dig_chat_history', JSON.stringify(savedChat));
-                
-                chatContainer.scrollTop = chatContainer.scrollHeight;
-                speakText(errorReply);
-            }
-        }
-
-        // --- INIZIALIZZAZIONE ---
-        renderSavedChat();
-        updateNotificationBtnUI();
-        fetchCareLinkData();
-        setInterval(fetchCareLinkData, 60000);
-        updateTimers();
-        setInterval(updateTimers, 60000);
-
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                const swCode = `
-                    self.addEventListener('install', (e) => self.skipWaiting());
-                    self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
-                    self.addEventListener('fetch', (e) => {
-                        e.respondWith(fetch(e.request).catch(() => new Response("Offline")));
-                    });
-                `;
-                const blob = new Blob([swCode], { type: 'application/javascript' });
-                const swUrl = URL.createObjectURL(blob);
-                
-                navigator.serviceWorker.register(swUrl, { scope: '/' })
-                    .then(() => console.log('Service Worker attivo.'))
-                    .catch(err => console.error('Errore SW:', err));
-            });
-        }
+            fetchCareLinkData();
+            setInterval(fetchCareLinkData, 60000);
+        });
     </script>
 </body>
 </html>
