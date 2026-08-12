@@ -27,7 +27,7 @@
         .tab-content { display: none; }
         .tab-content.active { display: flex; flex-direction: column; flex-grow: 1; }
         .subtab-content { display: none; }
-        .subtab-content.active { display: block; }
+        .subtab-content.active { display: flex; flex-direction: column; flex-grow: 1; }
         ::-webkit-scrollbar { width: 4px; }
         ::-webkit-scrollbar-track { background: rgba(30, 41, 59, 0.3); }
         ::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
@@ -142,15 +142,15 @@
                 <button onclick="switchSubTab('glossario')" id="btn-sub-glossario" class="flex-1 py-1 rounded text-slate-400">Glossario EN/IT</button>
             </div>
 
-            <div id="subtab-medica" class="subtab-content active flex-grow flex flex-col">
-                <textarea id="notes-medica" placeholder="Scrivi qui i tuoi appunti medici..." class="w-full flex-grow bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('medica')"></textarea>
+            <div id="subtab-medica" class="subtab-content active">
+                <textarea id="notes-medica" placeholder="Scrivi qui i tuoi appunti medici..." class="w-full h-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('medica')"></textarea>
             </div>
 
-            <div id="subtab-tecnologica" class="subtab-content flex-grow flex flex-col">
-                <textarea id="notes-tecnologica" placeholder="Scrivi qui i tuoi appunti tecnologici..." class="w-full flex-grow bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('tecnologica')"></textarea>
+            <div id="subtab-tecnologica" class="subtab-content">
+                <textarea id="notes-tecnologica" placeholder="Scrivi qui i tuoi appunti tecnologici..." class="w-full h-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('tecnologica')"></textarea>
             </div>
 
-            <div id="subtab-glossario" class="subtab-content flex-grow flex flex-col">
+            <div id="subtab-glossario" class="subtab-content">
                 <div class="flex gap-2 mb-2">
                     <input id="gloss-term" type="text" placeholder="Inserisci parola (IT o EN)" class="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
                     <button onclick="addGlossaryTermAuto()" id="btn-translate" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded text-xs">
@@ -237,10 +237,10 @@
 
         function loadNotes() {
             const savedMed = localStorage.getItem('dig_notes_medica');
-            if (savedMed) document.getElementById('notes-medica').value = savedMed;
+            if (savedMed !== null) document.getElementById('notes-medica').value = savedMed;
 
             const savedTec = localStorage.getItem('dig_notes_tecnologica');
-            if (savedTec) document.getElementById('notes-tecnologica').value = savedTec;
+            if (savedTec !== null) document.getElementById('notes-tecnologica').value = savedTec;
         }
 
         // TRADUZIONE AUTOMATICA PER IL GLOSSARIO
@@ -254,13 +254,11 @@
             btnEl.disabled = true;
 
             try {
-                // Rileva e traduce automaticamente via MyMemory API (IT <-> EN)
                 const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=autodetect|en`);
                 const data = await res.json();
                 
                 let translation = data.responseData ? data.responseData.translatedText : query;
 
-                // Se la traduzione restituisce la stessa parola, tenta il contrario (EN -> IT)
                 if (translation.toLowerCase() === query.toLowerCase()) {
                     const resIt = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=en|it`);
                     const dataIt = await resIt.json();
@@ -340,16 +338,18 @@
             });
         }
 
-        // PARSER PRECISO PER IOB
+        // ESTRAZIONE E CONVERSIONE RIGOROSA DELL'IOB
         function parseIobValue(val) {
             if (val === undefined || val === null || val === '') return null;
+            if (typeof val === 'object' && val.iob !== undefined) val = val.iob;
+            
             let cleanStr = String(val).replace(/[^0-9.-]/g, '');
             let num = parseFloat(cleanStr);
             if (isNaN(num)) return null;
-            if (num === 0) return "0.0";
             
-            let rounded2 = Math.round(num * 100) / 100;
-            return rounded2 % 1 === 0 ? rounded2.toFixed(1) : rounded2.toString();
+            // Arrotonda fino a 2 decimali per non perdere valori piccoli come 0.08 o 0.1
+            let rounded = Math.round(num * 100) / 100;
+            return rounded.toFixed(1);
         }
 
         // FETCH CON DOPPIO ENDPOINT (/sgv.json E /pebble)
@@ -587,7 +587,6 @@
                             const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
                             ctx.save();
                             
-                            // Disegna la fascia target dinamica 70-180 mg/dL
                             const top180 = Math.max(y.top, y.getPixelForValue(180));
                             const bottom70 = Math.min(y.bottom, y.getPixelForValue(70));
                             
@@ -596,7 +595,6 @@
                                 ctx.fillRect(x.left, top180, x.right - x.left, bottom70 - top180);
                             }
 
-                            // Linea rossa ipo a 70
                             if (y.getPixelForValue(70) >= y.top && y.getPixelForValue(70) <= y.bottom) {
                                 ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1;
                                 ctx.beginPath(); ctx.moveTo(x.left, y.getPixelForValue(70)); ctx.lineTo(x.right, y.getPixelForValue(70)); ctx.stroke();
