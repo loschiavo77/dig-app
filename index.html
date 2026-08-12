@@ -35,7 +35,7 @@
         #chart-container {
             position: relative;
             width: 100%;
-            height: 340px;
+            height: 320px;
         }
     </style>
 </head>
@@ -151,15 +151,14 @@
             </div>
 
             <div id="subtab-glossario" class="subtab-content flex-grow flex flex-col">
-                <div class="grid grid-cols-2 gap-2 mb-2">
-                    <input id="gloss-term" type="text" placeholder="Termine EN/IT" class="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
-                    <input id="gloss-trans" type="text" placeholder="Traduzione" class="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                <div class="flex gap-2 mb-2">
+                    <input id="gloss-term" type="text" placeholder="Inserisci parola (IT o EN)" class="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                    <button onclick="addGlossaryTermAuto()" id="btn-translate" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded text-xs">
+                        + Traduci
+                    </button>
                 </div>
-                <button onclick="addGlossaryTerm()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-1.5 rounded text-xs mb-3">
-                    + Salva Termine Glossario
-                </button>
 
-                <div class="flex-grow overflow-y-auto border border-slate-800/80 rounded bg-slate-950/40 p-2">
+                <div class="flex-grow overflow-y-auto border border-slate-800/80 rounded bg-slate-950/40 p-2 mt-1">
                     <div id="glossary-list" class="space-y-1.5"></div>
                 </div>
             </div>
@@ -222,35 +221,62 @@
             document.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
             ['medica', 'tecnologica', 'glossario'].forEach(name => {
                 const btn = document.getElementById(`btn-sub-${name}`);
-                btn.className = "flex-1 py-1 rounded text-slate-400";
+                if (btn) btn.className = "flex-1 py-1 rounded text-slate-400";
             });
 
             document.getElementById(`subtab-${subTabName}`).classList.add('active');
             const activeBtn = document.getElementById(`btn-sub-${subTabName}`);
-            activeBtn.className = "flex-1 py-1 rounded text-emerald-400 bg-slate-800";
+            if (activeBtn) activeBtn.className = "flex-1 py-1 rounded text-emerald-400 bg-slate-800";
         }
 
+        // SALVATAGGIO SEPARATO APPUNTI MEDICI E TECNOLOGICI
         function saveNotes(type) {
             const val = document.getElementById(`notes-${type}`).value;
             localStorage.setItem(`dig_notes_${type}`, val);
         }
 
         function loadNotes() {
-            ['medica', 'tecnologica'].forEach(type => {
-                const saved = localStorage.getItem(`dig_notes_${type}`);
-                if (saved) document.getElementById(`notes-${type}`).value = saved;
-            });
+            const savedMed = localStorage.getItem('dig_notes_medica');
+            if (savedMed) document.getElementById('notes-medica').value = savedMed;
+
+            const savedTec = localStorage.getItem('dig_notes_tecnologica');
+            if (savedTec) document.getElementById('notes-tecnologica').value = savedTec;
         }
 
-        function addGlossaryTerm() {
+        // TRADUZIONE AUTOMATICA PER IL GLOSSARIO
+        async function addGlossaryTermAuto() {
             const termEl = document.getElementById('gloss-term');
-            const transEl = document.getElementById('gloss-trans');
-            if (!termEl.value.trim() || !transEl.value.trim()) return;
+            const btnEl = document.getElementById('btn-translate');
+            const query = termEl.value.trim();
+            if (!query) return;
 
-            glossaryList.unshift({ term: termEl.value.trim(), trans: transEl.value.trim() });
-            localStorage.setItem('dig_glossary_list', JSON.stringify(glossaryList));
-            termEl.value = ''; transEl.value = '';
-            renderGlossary();
+            btnEl.innerText = "...";
+            btnEl.disabled = true;
+
+            try {
+                // Rileva e traduce automaticamente via MyMemory API (IT <-> EN)
+                const res = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=autodetect|en`);
+                const data = await res.json();
+                
+                let translation = data.responseData ? data.responseData.translatedText : query;
+
+                // Se la traduzione restituisce la stessa parola, tenta il contrario (EN -> IT)
+                if (translation.toLowerCase() === query.toLowerCase()) {
+                    const resIt = await fetch(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(query)}&langpair=en|it`);
+                    const dataIt = await resIt.json();
+                    if (dataIt.responseData) translation = dataIt.responseData.translatedText;
+                }
+
+                glossaryList.unshift({ term: query, trans: translation });
+                localStorage.setItem('dig_glossary_list', JSON.stringify(glossaryList));
+                termEl.value = '';
+                renderGlossary();
+            } catch (e) {
+                alert("Impossibile recuperare la traduzione al momento.");
+            } finally {
+                btnEl.innerText = "+ Traduci";
+                btnEl.disabled = false;
+            }
         }
 
         function removeGlossaryTerm(index) {
@@ -271,7 +297,7 @@
                     <div class="flex justify-between items-center bg-slate-900 border border-slate-800 p-2 rounded text-xs">
                         <div>
                             <span class="font-bold text-emerald-400 block">${item.term}</span>
-                            <span class="text-slate-400 text-[11px]">${item.trans}</span>
+                            <span class="text-slate-300 text-[11px]">${item.trans}</span>
                         </div>
                         <button onclick="removeGlossaryTerm(${idx})" class="text-red-400 font-bold px-2">✕</button>
                     </div>
@@ -314,7 +340,19 @@
             });
         }
 
-        // FETCH CON DOPPIO ENDPOINT (/sgv.json E /pebble) PER IOB
+        // PARSER PRECISO PER IOB
+        function parseIobValue(val) {
+            if (val === undefined || val === null || val === '') return null;
+            let cleanStr = String(val).replace(/[^0-9.-]/g, '');
+            let num = parseFloat(cleanStr);
+            if (isNaN(num)) return null;
+            if (num === 0) return "0.0";
+            
+            let rounded2 = Math.round(num * 100) / 100;
+            return rounded2 % 1 === 0 ? rounded2.toFixed(1) : rounded2.toString();
+        }
+
+        // FETCH CON DOPPIO ENDPOINT (/sgv.json E /pebble)
         async function fetchCareLinkData() {
             if (isFetching) return;
             isFetching = true;
@@ -337,10 +375,7 @@
                 if (pebbleResponse.status === 'fulfilled' && pebbleResponse.value.ok) {
                     const pebbleData = await pebbleResponse.value.json();
                     if (pebbleData && pebbleData.bgs && pebbleData.bgs.length > 0) {
-                        const iobVal = pebbleData.bgs[0].iob;
-                        if (iobVal !== undefined && iobVal !== null) {
-                            currentIob = parseFloat(iobVal).toFixed(1);
-                        }
+                        currentIob = parseIobValue(pebbleData.bgs[0].iob);
                     }
                 }
 
@@ -348,6 +383,10 @@
                     const data = await sgvResponse.value.json();
                     
                     if (data && data.length > 0) {
+                        if (currentIob === null && data[0].iob !== undefined) {
+                            currentIob = parseIobValue(data[0].iob);
+                        }
+
                         bgHistory = data.map(item => {
                             let date = new Date(item.date);
                             let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
@@ -362,8 +401,8 @@
                                 value: item.sgv, 
                                 trend: trendWord, 
                                 rawDate: date,
-                                iob: currentIob !== null ? currentIob : (item.iob ? parseFloat(item.iob).toFixed(1) : null),
-                                bolus: item.bolus ? 400 : null,
+                                iob: currentIob,
+                                bolus: item.bolus ? 250 : null,
                                 bolusColor: item.bolusType === 'manual' ? '#06b6d4' : '#c026d3',
                                 meal: item.mb ? 50 : null
                             };
@@ -432,13 +471,21 @@
             else if (tir >= 50) tirElement.className = "text-3xl font-black text-yellow-500 font-mono";
             else tirElement.className = "text-3xl font-black text-red-500 font-mono";
 
-            // GRAFICO
+            // GRAFICO OTTIMIZZATO SENZA SPAZIO VUOTO
             const ctx = document.getElementById('bgChart').getContext('2d');
             const labels = bgHistory.map(item => item.time);
             const values = bgHistory.map(item => item.value);
             const bolusValues = bgHistory.map(item => item.bolus || null);
             const bolusColors = bgHistory.map(item => item.bolusColor || '#c026d3');
             const mealValues = bgHistory.map(item => item.meal || null);
+
+            // CALCOLO SCALA Y DINAMICA
+            const validValues = values.filter(v => v !== null && v !== undefined);
+            const maxBG = validValues.length > 0 ? Math.max(...validValues) : 200;
+            const minBG = validValues.length > 0 ? Math.min(...validValues) : 70;
+            
+            const dynamicMax = Math.max(190, Math.ceil((maxBG + 15) / 10) * 10);
+            const dynamicMin = Math.min(60, Math.floor((minBG - 15) / 10) * 10);
 
             const totalPoints = labels.length;
             const defaultSpan = 48;
@@ -451,6 +498,9 @@
                 chartInstance.data.datasets[1].data = bolusValues;
                 chartInstance.data.datasets[2].data = mealValues;
                 
+                chartInstance.options.scales.y.min = dynamicMin;
+                chartInstance.options.scales.y.max = dynamicMax;
+
                 if (!hasUserScrolled) {
                     chartInstance.scales.x.options.min = minIndex;
                     chartInstance.scales.x.options.max = maxIndex;
@@ -498,14 +548,13 @@
                         maintainAspectRatio: false,
                         scales: {
                             y: { 
-                                min: 40, 
-                                max: 420, 
+                                min: dynamicMin, 
+                                max: dynamicMax, 
                                 position: 'right',
                                 grid: { color: 'rgba(51, 65, 85, 0.2)' }, 
                                 ticks: { 
                                     color: '#94a3b8', 
-                                    stepSize: 50,
-                                    callback: (val) => (val <= 400 ? val : '')
+                                    stepSize: 30
                                 }
                             },
                             x: { 
@@ -537,17 +586,21 @@
                         beforeDraw: (chart) => {
                             const ctx = chart.ctx; const y = chart.scales.y; const x = chart.scales.x;
                             ctx.save();
-                            ctx.fillStyle = 'rgba(16, 185, 129, 0.15)'; 
-                            ctx.fillRect(x.left, y.getPixelForValue(180), x.right - x.left, y.getPixelForValue(70) - y.getPixelForValue(180));
                             
-                            const y240 = y.getPixelForValue(240);
-                            const y70 = y.getPixelForValue(70);
+                            // Disegna la fascia target dinamica 70-180 mg/dL
+                            const top180 = Math.max(y.top, y.getPixelForValue(180));
+                            const bottom70 = Math.min(y.bottom, y.getPixelForValue(70));
                             
-                            ctx.strokeStyle = '#f97316'; ctx.lineWidth = 1;
-                            ctx.beginPath(); ctx.moveTo(x.left, y240); ctx.lineTo(x.right, y240); ctx.stroke();
+                            if (bottom70 > top180) {
+                                ctx.fillStyle = 'rgba(16, 185, 129, 0.15)'; 
+                                ctx.fillRect(x.left, top180, x.right - x.left, bottom70 - top180);
+                            }
 
-                            ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1;
-                            ctx.beginPath(); ctx.moveTo(x.left, y70); ctx.lineTo(x.right, y70); ctx.stroke();
+                            // Linea rossa ipo a 70
+                            if (y.getPixelForValue(70) >= y.top && y.getPixelForValue(70) <= y.bottom) {
+                                ctx.strokeStyle = '#ef4444'; ctx.lineWidth = 1;
+                                ctx.beginPath(); ctx.moveTo(x.left, y.getPixelForValue(70)); ctx.lineTo(x.right, y.getPixelForValue(70)); ctx.stroke();
+                            }
                             ctx.restore();
                         }
                     }]
