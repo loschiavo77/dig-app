@@ -218,32 +218,41 @@
         }
 
         function switchSubTab(subTabName) {
-            document.querySelectorAll('.subtab-content').forEach(el => el.classList.remove('active'));
+            document.querySelectorAll('.subtab-content').forEach(el => {
+                el.classList.remove('active');
+                el.style.display = 'none';
+            });
+            
             ['medica', 'tecnologica', 'glossario'].forEach(name => {
                 const btn = document.getElementById(`btn-sub-${name}`);
                 if (btn) btn.className = "flex-1 py-1 rounded text-slate-400";
             });
 
-            document.getElementById(`subtab-${subTabName}`).classList.add('active');
+            const activeSub = document.getElementById(`subtab-${subTabName}`);
+            if (activeSub) {
+                activeSub.classList.add('active');
+                activeSub.style.display = 'flex';
+            }
+
             const activeBtn = document.getElementById(`btn-sub-${subTabName}`);
             if (activeBtn) activeBtn.className = "flex-1 py-1 rounded text-emerald-400 bg-slate-800";
         }
 
-        // SALVATAGGIO SEPARATO APPUNTI MEDICI E TECNOLOGICI
+        // SALVATAGGIO ISOLATO ED ESCLUSIVO PER MEDICA E TECNOLOGICA
         function saveNotes(type) {
-            const val = document.getElementById(`notes-${type}`).value;
-            localStorage.setItem(`dig_notes_${type}`, val);
+            const el = document.getElementById(`notes-${type}`);
+            if (el) localStorage.setItem(`dig_notes_${type}`, el.value);
         }
 
         function loadNotes() {
-            const savedMed = localStorage.getItem('dig_notes_medica');
-            if (savedMed !== null) document.getElementById('notes-medica').value = savedMed;
+            const medEl = document.getElementById('notes-medica');
+            const tecEl = document.getElementById('notes-tecnologica');
 
-            const savedTec = localStorage.getItem('dig_notes_tecnologica');
-            if (savedTec !== null) document.getElementById('notes-tecnologica').value = savedTec;
+            if (medEl) medEl.value = localStorage.getItem('dig_notes_medica') || '';
+            if (tecEl) tecEl.value = localStorage.getItem('dig_notes_tecnologica') || '';
         }
 
-        // TRADUZIONE AUTOMATICA PER IL GLOSSARIO
+        // TRADUZIONE AUTOMATICA GLOSSARIO
         async function addGlossaryTermAuto() {
             const termEl = document.getElementById('gloss-term');
             const btnEl = document.getElementById('btn-translate');
@@ -338,21 +347,25 @@
             });
         }
 
-        // ESTRAZIONE E CONVERSIONE RIGOROSA DELL'IOB
+        // CORREZIONE DEFINITIVA PER ESTRAZIONE ESTRANEA ED ESATTA DELL'IOB
         function parseIobValue(val) {
             if (val === undefined || val === null || val === '') return null;
-            if (typeof val === 'object' && val.iob !== undefined) val = val.iob;
-            
-            let cleanStr = String(val).replace(/[^0-9.-]/g, '');
-            let num = parseFloat(cleanStr);
+            if (typeof val === 'object') {
+                if (val.iob !== undefined) val = val.iob;
+                else if (val.value !== undefined) val = val.value;
+            }
+
+            // Estrae SOLO il primo numero decimale valido (es. "0.1 U (13m)" -> 0.1)
+            let str = String(val);
+            let match = str.match(/[-+]?\d*\.?\d+/);
+            if (!match) return null;
+
+            let num = parseFloat(match[0]);
             if (isNaN(num)) return null;
-            
-            // Arrotonda fino a 2 decimali per non perdere valori piccoli come 0.08 o 0.1
-            let rounded = Math.round(num * 100) / 100;
-            return rounded.toFixed(1);
+
+            return num.toFixed(1);
         }
 
-        // FETCH CON DOPPIO ENDPOINT (/sgv.json E /pebble)
         async function fetchCareLinkData() {
             if (isFetching) return;
             isFetching = true;
@@ -471,7 +484,7 @@
             else if (tir >= 50) tirElement.className = "text-3xl font-black text-yellow-500 font-mono";
             else tirElement.className = "text-3xl font-black text-red-500 font-mono";
 
-            // GRAFICO OTTIMIZZATO SENZA SPAZIO VUOTO
+            // GRAFICO OTTIMIZZATO
             const ctx = document.getElementById('bgChart').getContext('2d');
             const labels = bgHistory.map(item => item.time);
             const values = bgHistory.map(item => item.value);
@@ -479,7 +492,6 @@
             const bolusColors = bgHistory.map(item => item.bolusColor || '#c026d3');
             const mealValues = bgHistory.map(item => item.meal || null);
 
-            // CALCOLO SCALA Y DINAMICA
             const validValues = values.filter(v => v !== null && v !== undefined);
             const maxBG = validValues.length > 0 ? Math.max(...validValues) : 200;
             const minBG = validValues.length > 0 ? Math.min(...validValues) : 70;
@@ -658,6 +670,7 @@
             loadNotes();
             renderCHO();
             renderGlossary();
+            switchSubTab('medica');
             if (bgHistory.length > 0) updateUI();
             
             setInterval(updateTimers, 60000);
