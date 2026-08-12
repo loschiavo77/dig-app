@@ -35,7 +35,7 @@
         #chart-container {
             position: relative;
             width: 100%;
-            height: 340px; /* Ingrandito */
+            height: 340px;
         }
     </style>
 </head>
@@ -53,7 +53,7 @@
             </h3>
             
             <div class="grid grid-cols-5 gap-2 mb-3">
-                <input id="cho-food" type="text" placeholder="Cibo (es. Pane integrale)" class="col-span-3 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                <input id="cho-food" type="text" placeholder="Cibo (es. Pane)" class="col-span-3 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
                 <input id="cho-val" type="number" placeholder="CHO /100g" class="col-span-2 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
             </div>
             <button onclick="addCarbItem()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-1.5 rounded text-xs mb-3">
@@ -69,8 +69,7 @@
                             <th class="p-2 text-center"></th>
                         </tr>
                     </thead>
-                    <tbody id="cho-table-body" class="divide-y divide-slate-800/50">
-                        </tbody>
+                    <tbody id="cho-table-body" class="divide-y divide-slate-800/50"></tbody>
                 </table>
             </div>
         </div>
@@ -94,7 +93,6 @@
         </div>
 
         <div id="alert-box" class="mt-2 p-2 rounded bg-red-950/50 border border-red-500 text-red-400 text-xs font-bold hidden animate-pulse text-center"></div>
-        <div id="predictive-alert-box" class="mt-1 p-2 rounded bg-yellow-950/40 border border-yellow-600 text-yellow-400 text-xs font-bold hidden text-center border-dashed"></div>
 
         <div class="flex justify-between items-center px-2 mt-2">
             <span class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Insulina attiva (IOB):</span>
@@ -145,25 +143,24 @@
             </div>
 
             <div id="subtab-medica" class="subtab-content active flex-grow flex flex-col">
-                <textarea id="notes-medica" placeholder="Scrivi i tuoi appunti medici qui (fisiologia, farmacologia, patologie)..." class="w-full flex-grow bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('medica')"></textarea>
+                <textarea id="notes-medica" placeholder="Scrivi qui i tuoi appunti medici..." class="w-full flex-grow bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('medica')"></textarea>
             </div>
 
             <div id="subtab-tecnologica" class="subtab-content flex-grow flex flex-col">
-                <textarea id="notes-tecnologica" placeholder="Scrivi i tuoi appunti tecnologici qui (microinfusori, algoritmi basali, sensori)..." class="w-full flex-grow bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('tecnologica')"></textarea>
+                <textarea id="notes-tecnologica" placeholder="Scrivi qui i tuoi appunti tecnologici..." class="w-full flex-grow bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('tecnologica')"></textarea>
             </div>
 
             <div id="subtab-glossario" class="subtab-content flex-grow flex flex-col">
                 <div class="grid grid-cols-2 gap-2 mb-2">
-                    <input id="gloss-term" type="text" placeholder="Termine (es. Dawn Phenomenon)" class="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
-                    <input id="gloss-trans" type="text" placeholder="Traduzione (es. Fenomeno dell'alba)" class="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                    <input id="gloss-term" type="text" placeholder="Termine EN/IT" class="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                    <input id="gloss-trans" type="text" placeholder="Traduzione" class="bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
                 </div>
                 <button onclick="addGlossaryTerm()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-1.5 rounded text-xs mb-3">
                     + Salva Termine Glossario
                 </button>
 
                 <div class="flex-grow overflow-y-auto border border-slate-800/80 rounded bg-slate-950/40 p-2">
-                    <div id="glossary-list" class="space-y-1.5">
-                        </div>
+                    <div id="glossary-list" class="space-y-1.5"></div>
                 </div>
             </div>
         </div>
@@ -190,13 +187,11 @@
         let choList = JSON.parse(localStorage.getItem('dig_cho_list')) || [];
         let glossaryList = JSON.parse(localStorage.getItem('dig_glossary_list')) || [];
 
-        // RESTORE LOCALSTORAGE DTI
         try {
             const cachedHistory = localStorage.getItem('dig_bgHistory');
             if (cachedHistory) bgHistory = JSON.parse(cachedHistory);
         } catch(e) {}
 
-        // --- GESTIONE TAB / SUBTAB ---
         function switchTab(tabName) {
             document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(el => {
@@ -235,7 +230,6 @@
             activeBtn.className = "flex-1 py-1 rounded text-emerald-400 bg-slate-800";
         }
 
-        // --- GESTIONE APPUNTI & GLOSSARIO ---
         function saveNotes(type) {
             const val = document.getElementById(`notes-${type}`).value;
             localStorage.setItem(`dig_notes_${type}`, val);
@@ -285,7 +279,6 @@
             });
         }
 
-        // --- GESTIONE DIARIO CARBOIDRATI ---
         function addCarbItem() {
             const foodEl = document.getElementById('cho-food');
             const valEl = document.getElementById('cho-val');
@@ -321,7 +314,7 @@
             });
         }
 
-        // --- FETCH CARELINK / XDRIP+ DATI ---
+        // FETCH CON DOPPIO ENDPOINT (/sgv.json E /pebble) PER IOB
         async function fetchCareLinkData() {
             if (isFetching) return;
             isFetching = true;
@@ -333,52 +326,59 @@
             const timeoutId = setTimeout(() => controller.abort(), 5000);
 
             try {
-                const response = await fetch('http://127.0.0.1:17580/sgv.json?count=288', { // 288 letture = 24 ore esatte
-                    signal: controller.signal,
-                    cache: 'no-store'
-                });
+                const [sgvResponse, pebbleResponse] = await Promise.allSettled([
+                    fetch('http://127.0.0.1:17580/sgv.json?count=288', { signal: controller.signal, cache: 'no-store' }),
+                    fetch('http://127.0.0.1:17580/pebble', { signal: controller.signal, cache: 'no-store' })
+                ]);
+
                 clearTimeout(timeoutId);
 
-                if (!response.ok) throw new Error("Risposta HTTP non valida");
-
-                const data = await response.json();
-                
-                if (data && data.length > 0) {
-                    bgHistory = data.map(item => {
-                        let date = new Date(item.date);
-                        let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
-                        let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
-                        let trendWord = "FLAT";
-                        if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
-                        if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
-                        
-                        let calculatedIob = null;
-                        if (item.iob !== undefined && item.iob !== null) {
-                            calculatedIob = parseFloat(item.iob).toFixed(1);
+                let currentIob = null;
+                if (pebbleResponse.status === 'fulfilled' && pebbleResponse.value.ok) {
+                    const pebbleData = await pebbleResponse.value.json();
+                    if (pebbleData && pebbleData.bgs && pebbleData.bgs.length > 0) {
+                        const iobVal = pebbleData.bgs[0].iob;
+                        if (iobVal !== undefined && iobVal !== null) {
+                            currentIob = parseFloat(iobVal).toFixed(1);
                         }
+                    }
+                }
 
-                        return { 
-                            date: dateStr, 
-                            time: timeStr, 
-                            value: item.sgv, 
-                            trend: trendWord, 
-                            rawDate: date,
-                            iob: calculatedIob,
-                            bolus: item.bolus ? 400 : null,
-                            bolusColor: item.bolusType === 'manual' ? '#06b6d4' : '#c026d3',
-                            meal: item.mb ? 50 : null
-                        };
-                    }).reverse();
+                if (sgvResponse.status === 'fulfilled' && sgvResponse.value.ok) {
+                    const data = await sgvResponse.value.json();
+                    
+                    if (data && data.length > 0) {
+                        bgHistory = data.map(item => {
+                            let date = new Date(item.date);
+                            let dateStr = `${String(date.getDate()).padStart(2,'0')}/${String(date.getMonth()+1).padStart(2,'0')}/${date.getFullYear()}`;
+                            let timeStr = `${String(date.getHours()).padStart(2,'0')}:${String(date.getMinutes()).padStart(2,'0')}`;
+                            let trendWord = "FLAT";
+                            if (item.direction === "DoubleUp" || item.direction === "SingleUp" || item.direction === "FortyFiveUp") trendWord = "UP";
+                            if (item.direction === "DoubleDown" || item.direction === "SingleDown" || item.direction === "FortyFiveDown") trendWord = "DOWN";
 
-                    try {
-                        localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
-                    } catch(e) {}
-                    
-                    checkAlerts();
-                    updateUI();
-                    
-                    let oraAttuale = new Date();
-                    if (syncEl) syncEl.innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
+                            return { 
+                                date: dateStr, 
+                                time: timeStr, 
+                                value: item.sgv, 
+                                trend: trendWord, 
+                                rawDate: date,
+                                iob: currentIob !== null ? currentIob : (item.iob ? parseFloat(item.iob).toFixed(1) : null),
+                                bolus: item.bolus ? 400 : null,
+                                bolusColor: item.bolusType === 'manual' ? '#06b6d4' : '#c026d3',
+                                meal: item.mb ? 50 : null
+                            };
+                        }).reverse();
+
+                        try {
+                            localStorage.setItem('dig_bgHistory', JSON.stringify(bgHistory));
+                        } catch(e) {}
+                        
+                        checkAlerts();
+                        updateUI();
+                        
+                        let oraAttuale = new Date();
+                        if (syncEl) syncEl.innerText = `Aggiornato: ${String(oraAttuale.getHours()).padStart(2,'0')}:${String(oraAttuale.getMinutes()).padStart(2,'0')}`;
+                    }
                 }
             } catch (err) {
                 if (syncEl) syncEl.innerText = "Offline (xDrip)";
@@ -401,7 +401,6 @@
             }
         }
 
-        // --- RENDER INTERFACCIA HOME ---
         function updateUI() {
             if (bgHistory.length === 0) return;
             const current = bgHistory[bgHistory.length - 1];
@@ -412,7 +411,7 @@
             if (current.trend === "DOWN") arrow = "↓";
             document.getElementById('bg-trend').innerText = arrow;
 
-            // INSULINA ATTIVA (IOB)
+            // MOSTRA IOB
             const iobEl = document.getElementById('iob-value');
             if (current.iob !== null && current.iob !== undefined) {
                 iobEl.innerText = `${current.iob} U`;
@@ -420,7 +419,7 @@
                 iobEl.innerText = `-- U`;
             }
 
-            // CALCOLO TIR ESCLUSIVO ULTIME 24 ORE
+            // TIR 24h
             const nowMs = Date.now();
             const last24hData = bgHistory.filter(item => (nowMs - new Date(item.rawDate).getTime()) <= 24 * 60 * 60 * 1000);
             
@@ -433,7 +432,7 @@
             else if (tir >= 50) tirElement.className = "text-3xl font-black text-yellow-500 font-mono";
             else tirElement.className = "text-3xl font-black text-red-500 font-mono";
 
-            // GRAFICO CARELINK INGRANDITO
+            // GRAFICO
             const ctx = document.getElementById('bgChart').getContext('2d');
             const labels = bgHistory.map(item => item.time);
             const values = bgHistory.map(item => item.value);
@@ -556,7 +555,6 @@
             }
         }
 
-        // --- TIMER HARDWARE ---
         function resetTimerQuick(type, defaultDays) {
             const msDays = defaultDays * 24 * 60 * 60 * 1000;
             localStorage.setItem(`dig_expire_${type}`, Date.now() + msDays);
