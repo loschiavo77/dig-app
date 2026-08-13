@@ -48,16 +48,24 @@
 
     <div id="tab-cho" class="tab-content justify-between">
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[75vh]">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-3 pb-2 border-b border-slate-800">
-                🥗 Diario & Tabella Carboidrati
+            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2">
+                🥗 Tabella & Categorie Carboidrati
             </h3>
-            
-            <div class="grid grid-cols-5 gap-2 mb-3">
-                <input id="cho-food" type="text" placeholder="Cibo (es. Pane)" class="col-span-3 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+
+            <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-3 text-[9px] font-bold gap-1 overflow-x-auto">
+                <button onclick="switchChoTab('sushi')" id="btn-cho-sushi" class="flex-1 py-1 px-1.5 rounded text-emerald-400 bg-slate-800 whitespace-nowrap">🍣 Sushi</button>
+                <button onclick="switchChoTab('alimenti')" id="btn-cho-alimenti" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🍞 Alimenti</button>
+                <button onclick="switchChoTab('legumi')" id="btn-cho-legumi" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🫘 Legumi</button>
+                <button onclick="switchChoTab('verdura')" id="btn-cho-verdura" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🥦 Verdura</button>
+                <button onclick="switchChoTab('frutta')" id="btn-cho-frutta" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🍎 Frutta</button>
+            </div>
+
+            <div class="grid grid-cols-5 gap-2 mb-2">
+                <input id="cho-food" type="text" placeholder="Nome cibo..." class="col-span-3 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
                 <input id="cho-val" type="number" placeholder="CHO /100g" class="col-span-2 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
             </div>
             <button onclick="addCarbItem()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-1.5 rounded text-xs mb-3">
-                + Aggiungi alla Tabella
+                + Aggiungi Cibo
             </button>
 
             <div class="flex-grow overflow-y-auto pr-1">
@@ -183,7 +191,15 @@
         let hasUserScrolled = false;
         let isFetching = false;
 
-        let choList = JSON.parse(localStorage.getItem('dig_cho_list')) || [];
+        let activeChoCategory = 'sushi';
+        let choCategories = {
+            sushi: JSON.parse(localStorage.getItem('dig_cho_sushi')) || [],
+            alimenti: JSON.parse(localStorage.getItem('dig_cho_alimenti')) || [],
+            legumi: JSON.parse(localStorage.getItem('dig_cho_legumi')) || [],
+            verdura: JSON.parse(localStorage.getItem('dig_cho_verdura')) || [],
+            frutta: JSON.parse(localStorage.getItem('dig_cho_frutta')) || []
+        };
+
         let glossaryList = JSON.parse(localStorage.getItem('dig_glossary_list')) || [];
 
         try {
@@ -217,6 +233,58 @@
             }
         }
 
+        // GESTIONE SCHEDE CARBOIDRATI
+        function switchChoTab(catName) {
+            activeChoCategory = catName;
+            ['sushi', 'alimenti', 'legumi', 'verdura', 'frutta'].forEach(cat => {
+                const btn = document.getElementById(`btn-cho-${cat}`);
+                if (btn) btn.className = "flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap";
+            });
+
+            const activeBtn = document.getElementById(`btn-cho-${catName}`);
+            if (activeBtn) activeBtn.className = "flex-1 py-1 px-1.5 rounded text-emerald-400 bg-slate-800 whitespace-nowrap";
+
+            renderCHO();
+        }
+
+        function addCarbItem() {
+            const foodEl = document.getElementById('cho-food');
+            const valEl = document.getElementById('cho-val');
+            if (!foodEl.value.trim() || !valEl.value) return;
+
+            choCategories[activeChoCategory].unshift({ food: foodEl.value.trim(), val: parseFloat(valEl.value) });
+            localStorage.setItem(`dig_cho_${activeChoCategory}`, JSON.stringify(choCategories[activeChoCategory]));
+            foodEl.value = ''; valEl.value = '';
+            renderCHO();
+        }
+
+        function removeCarbItem(index) {
+            choCategories[activeChoCategory].splice(index, 1);
+            localStorage.setItem(`dig_cho_${activeChoCategory}`, JSON.stringify(choCategories[activeChoCategory]));
+            renderCHO();
+        }
+
+        function renderCHO() {
+            const tbody = document.getElementById('cho-table-body');
+            tbody.innerHTML = '';
+            const currentList = choCategories[activeChoCategory] || [];
+
+            if(currentList.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="text-slate-500 text-xs italic text-center py-4">Nessun alimento in questa categoria</td></tr>`;
+                return;
+            }
+            currentList.forEach((item, idx) => {
+                tbody.innerHTML += `
+                    <tr class="hover:bg-slate-900/50">
+                        <td class="p-2 font-medium text-slate-200">${item.food}</td>
+                        <td class="p-2 text-right font-mono text-emerald-400 font-bold">${item.val} g</td>
+                        <td class="p-2 text-center"><button onclick="removeCarbItem(${idx})" class="text-red-400 font-bold">✕</button></td>
+                    </tr>
+                `;
+            });
+        }
+
+        // GESTIONE SCHEDE APPUNTI
         function switchSubTab(subTabName) {
             document.querySelectorAll('.subtab-content').forEach(el => {
                 el.classList.remove('active');
@@ -238,7 +306,6 @@
             if (activeBtn) activeBtn.className = "flex-1 py-1 rounded text-emerald-400 bg-slate-800";
         }
 
-        // SALVATAGGIO ISOLATO ED ESCLUSIVO PER MEDICA E TECNOLOGICA
         function saveNotes(type) {
             const el = document.getElementById(`notes-${type}`);
             if (el) localStorage.setItem(`dig_notes_${type}`, el.value);
@@ -312,42 +379,7 @@
             });
         }
 
-        function addCarbItem() {
-            const foodEl = document.getElementById('cho-food');
-            const valEl = document.getElementById('cho-val');
-            if (!foodEl.value.trim() || !valEl.value) return;
-
-            choList.unshift({ food: foodEl.value.trim(), val: parseFloat(valEl.value) });
-            localStorage.setItem('dig_cho_list', JSON.stringify(choList));
-            foodEl.value = ''; valEl.value = '';
-            renderCHO();
-        }
-
-        function removeCarbItem(index) {
-            choList.splice(index, 1);
-            localStorage.setItem('dig_cho_list', JSON.stringify(choList));
-            renderCHO();
-        }
-
-        function renderCHO() {
-            const tbody = document.getElementById('cho-table-body');
-            tbody.innerHTML = '';
-            if(choList.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="3" class="text-slate-500 text-xs italic text-center py-4">Nessun alimento inserito</td></tr>`;
-                return;
-            }
-            choList.forEach((item, idx) => {
-                tbody.innerHTML += `
-                    <tr class="hover:bg-slate-900/50">
-                        <td class="p-2 font-medium text-slate-200">${item.food}</td>
-                        <td class="p-2 text-right font-mono text-emerald-400 font-bold">${item.val} g</td>
-                        <td class="p-2 text-center"><button onclick="removeCarbItem(${idx})" class="text-red-400 font-bold">✕</button></td>
-                    </tr>
-                `;
-            });
-        }
-
-        // CORREZIONE DEFINITIVA PER ESTRAZIONE ESTRANEA ED ESATTA DELL'IOB
+        // PARSER IOB CORRETTO
         function parseIobValue(val) {
             if (val === undefined || val === null || val === '') return null;
             if (typeof val === 'object') {
@@ -355,7 +387,6 @@
                 else if (val.value !== undefined) val = val.value;
             }
 
-            // Estrae SOLO il primo numero decimale valido (es. "0.1 U (13m)" -> 0.1)
             let str = String(val);
             let match = str.match(/[-+]?\d*\.?\d+/);
             if (!match) return null;
@@ -484,7 +515,7 @@
             else if (tir >= 50) tirElement.className = "text-3xl font-black text-yellow-500 font-mono";
             else tirElement.className = "text-3xl font-black text-red-500 font-mono";
 
-            // GRAFICO OTTIMIZZATO
+            // GRAFICO
             const ctx = document.getElementById('bgChart').getContext('2d');
             const labels = bgHistory.map(item => item.time);
             const values = bgHistory.map(item => item.value);
