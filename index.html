@@ -41,17 +41,20 @@
 </head>
 <body class="flex flex-col min-h-screen p-3 max-w-md mx-auto">
 
+    <!-- HEADER -->
     <div class="flex justify-between items-center border-b border-slate-800 pb-2 mb-3">
         <h1 class="text-2xl font-black text-emerald-400 tracking-wider">D.I.G.</h1>
         <span id="last-sync" class="text-xs text-slate-500 font-mono">In attesa...</span>
     </div>
 
+    <!-- TAB SINISTRA: DIARIO CARBOIDRATI -->
     <div id="tab-cho" class="tab-content justify-between">
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[75vh]">
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[78vh] overflow-y-auto">
             <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2">
                 🥗 Tabella & Categorie Carboidrati
             </h3>
 
+            <!-- SUBTAB CARBOIDRATI -->
             <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-3 text-[9px] font-bold gap-1 overflow-x-auto">
                 <button onclick="switchChoTab('sushi')" id="btn-cho-sushi" class="flex-1 py-1 px-1.5 rounded text-emerald-400 bg-slate-800 whitespace-nowrap">🍣 Sushi</button>
                 <button onclick="switchChoTab('alimenti')" id="btn-cho-alimenti" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🍞 Alimenti</button>
@@ -60,6 +63,7 @@
                 <button onclick="switchChoTab('frutta')" id="btn-cho-frutta" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🍎 Frutta</button>
             </div>
 
+            <!-- INPUT E TABELLA CATEGORIA ATTIVA -->
             <div class="grid grid-cols-5 gap-2 mb-2">
                 <input id="cho-food" type="text" placeholder="Nome cibo..." class="col-span-3 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
                 <input id="cho-val" type="number" placeholder="CHO /100g" class="col-span-2 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
@@ -68,7 +72,7 @@
                 + Aggiungi Cibo
             </button>
 
-            <div class="flex-grow overflow-y-auto pr-1">
+            <div class="max-h-40 overflow-y-auto pr-1 mb-4 border-b border-slate-800/80 pb-3">
                 <table class="w-full text-left text-xs">
                     <thead class="bg-slate-950 text-slate-400 border-b border-slate-800 sticky top-0">
                         <tr>
@@ -80,9 +84,25 @@
                     <tbody id="cho-table-body" class="divide-y divide-slate-800/50"></tbody>
                 </table>
             </div>
+
+            <!-- SEZIONE CALCOLATORE PASTO -->
+            <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5">
+                <h4 class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5">
+                    🧮 Calcolatore Calcolo Rapido Pasto
+                </h4>
+                <textarea id="meal-input" oninput="calculateMeal()" placeholder="Es: 120g di pasta, 35g di pane e 20g di crostata..." class="w-full h-16 bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none mb-2"></textarea>
+                
+                <div id="meal-breakdown" class="space-y-1 mb-2 max-h-28 overflow-y-auto pr-1 text-[11px]"></div>
+
+                <div class="flex justify-between items-center border-t border-slate-800 pt-2 mt-1">
+                    <span class="text-xs font-bold text-slate-400 uppercase">Totale Carboidrati:</span>
+                    <span id="meal-total" class="text-base font-black text-emerald-400 font-mono">0 g</span>
+                </div>
+            </div>
         </div>
     </div>
 
+    <!-- TAB CENTRO: HOME -->
     <div id="tab-home" class="tab-content active justify-between">
         <div class="flex justify-between items-center bg-slate-900/30 border border-slate-800/60 p-3 rounded-2xl">
             <div class="text-left">
@@ -102,17 +122,20 @@
 
         <div id="alert-box" class="mt-2 p-2 rounded bg-red-950/50 border border-red-500 text-red-400 text-xs font-bold hidden animate-pulse text-center"></div>
 
+        <!-- INSULINA ATTIVA (IOB) -->
         <div class="flex justify-between items-center px-2 mt-2">
             <span class="text-[11px] text-slate-400 font-bold uppercase tracking-wider">Insulina attiva (IOB):</span>
             <span id="iob-value" class="text-lg font-black text-emerald-400 font-mono">-- U</span>
         </div>
 
+        <!-- GRAFICO -->
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-2 my-2 flex-grow flex flex-col justify-center relative">
             <div id="chart-container">
                 <canvas id="bgChart"></canvas>
             </div>
         </div>
 
+        <!-- SCADENZE SENSORI -->
         <div class="grid grid-cols-2 gap-2 mb-1">
             <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-2 text-center flex flex-col justify-between">
                 <div>
@@ -138,6 +161,7 @@
         </div>
     </div>
 
+    <!-- TAB DESTRA: APPUNTI STUDIO DIABETOLOGIA -->
     <div id="tab-notes" class="tab-content justify-between">
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[75vh]">
             <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2">
@@ -150,14 +174,17 @@
                 <button onclick="switchSubTab('glossario')" id="btn-sub-glossario" class="flex-1 py-1 rounded text-slate-400">Glossario EN/IT</button>
             </div>
 
+            <!-- SUBTAB MEDICA -->
             <div id="subtab-medica" class="subtab-content active">
                 <textarea id="notes-medica" placeholder="Scrivi qui i tuoi appunti medici..." class="w-full h-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('medica')"></textarea>
             </div>
 
+            <!-- SUBTAB TECNOLOGICA -->
             <div id="subtab-tecnologica" class="subtab-content">
                 <textarea id="notes-tecnologica" placeholder="Scrivi qui i tuoi appunti tecnologici..." class="w-full h-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('tecnologica')"></textarea>
             </div>
 
+            <!-- SUBTAB GLOSSARIO -->
             <div id="subtab-glossario" class="subtab-content">
                 <div class="flex gap-2 mb-2">
                     <input id="gloss-term" type="text" placeholder="Inserisci parola (IT o EN)" class="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
@@ -173,6 +200,7 @@
         </div>
     </div>
 
+    <!-- NAVBAR IN BASSO -->
     <div class="flex justify-around border-t border-slate-800 pt-2 mt-auto bg-slate-950/90 p-2 rounded-xl">
         <button onclick="switchTab('cho')" class="nav-btn text-slate-500 font-bold text-xs flex flex-col items-center gap-1">
             <span>🥗</span> Carboidrati
@@ -256,12 +284,14 @@
             localStorage.setItem(`dig_cho_${activeChoCategory}`, JSON.stringify(choCategories[activeChoCategory]));
             foodEl.value = ''; valEl.value = '';
             renderCHO();
+            calculateMeal();
         }
 
         function removeCarbItem(index) {
             choCategories[activeChoCategory].splice(index, 1);
             localStorage.setItem(`dig_cho_${activeChoCategory}`, JSON.stringify(choCategories[activeChoCategory]));
             renderCHO();
+            calculateMeal();
         }
 
         function renderCHO() {
@@ -282,6 +312,57 @@
                     </tr>
                 `;
             });
+        }
+
+        // CALCOLATORE RAPIDO PASTO
+        function calculateMeal() {
+            const text = document.getElementById('meal-input').value.toLowerCase();
+            const breakdownEl = document.getElementById('meal-breakdown');
+            const totalEl = document.getElementById('meal-total');
+            breakdownEl.innerHTML = '';
+
+            if (!text.trim()) {
+                totalEl.innerText = "0 g";
+                return;
+            }
+
+            let allFoods = [];
+            Object.keys(choCategories).forEach(cat => {
+                allFoods = allFoods.concat(choCategories[cat]);
+            });
+
+            let totalCho = 0;
+            let foundAny = false;
+
+            // Cerca pattern tipo: 120g di pasta, 120 g pasta, 120g pasta
+            const regex = /(\d+(?:[\.,]\d+)?)\s*g?\s*(?:di\s+)?([a-zàèéìòù\s]+)/gi;
+            let match;
+
+            while ((match = regex.exec(text)) !== null) {
+                const grams = parseFloat(match[1].replace(',', '.'));
+                const rawName = match[2].trim();
+
+                const matchedFood = allFoods.find(f => rawName.includes(f.food.toLowerCase()) || f.food.toLowerCase().includes(rawName));
+
+                if (matchedFood && grams) {
+                    const choCalc = (grams * matchedFood.val) / 100;
+                    totalCho += choCalc;
+                    foundAny = true;
+
+                    breakdownEl.innerHTML += `
+                        <div class="flex justify-between items-center bg-slate-900 px-2 py-1 rounded border border-slate-800">
+                            <span class="text-slate-300 font-medium">${grams}g ${matchedFood.food} <span class="text-slate-500">(${matchedFood.val}g/100g)</span></span>
+                            <span class="font-mono text-emerald-400 font-bold">${choCalc.toFixed(1)}g</span>
+                        </div>
+                    `;
+                }
+            }
+
+            if (!foundAny) {
+                breakdownEl.innerHTML = `<div class="text-slate-500 italic text-[10px]">Nessun cibo riconosciuto tra quelli memorizzati nelle tabelle.</div>`;
+            }
+
+            totalEl.innerText = `${totalCho.toFixed(1)} g`;
         }
 
         // GESTIONE SCHEDE APPUNTI
@@ -466,7 +547,7 @@
             } catch (err) {
                 if (syncEl) syncEl.innerText = "Offline (xDrip)";
                 if (bgHistory.length > 0) updateUI();
-            } finally {
+            } font-bold {
                 isFetching = false;
             }
         }
