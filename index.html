@@ -334,7 +334,6 @@
             let totalCho = 0;
             let foundAny = false;
 
-            // Cerca pattern tipo: 120g di pasta, 120 g pasta, 120g pasta
             const regex = /(\d+(?:[\.,]\d+)?)\s*g?\s*(?:di\s+)?([a-zàèéìòù\s]+)/gi;
             let match;
 
@@ -547,7 +546,7 @@
             } catch (err) {
                 if (syncEl) syncEl.innerText = "Offline (xDrip)";
                 if (bgHistory.length > 0) updateUI();
-            } font-bold {
+            } finally {
                 isFetching = false;
             }
         }
