@@ -49,13 +49,13 @@
 
     <!-- TAB SINISTRA: DIARIO CARBOIDRATI -->
     <div id="tab-cho" class="tab-content justify-between">
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[78vh] overflow-y-auto">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2">
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[78vh]">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2 flex-shrink-0">
                 🥗 Tabella & Categorie Carboidrati
             </h3>
 
             <!-- SUBTAB CARBOIDRATI -->
-            <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-3 text-[9px] font-bold gap-1 overflow-x-auto">
+            <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-3 text-[9px] font-bold gap-1 overflow-x-auto flex-shrink-0">
                 <button onclick="switchChoTab('sushi')" id="btn-cho-sushi" class="flex-1 py-1 px-1.5 rounded text-emerald-400 bg-slate-800 whitespace-nowrap">🍣 Sushi</button>
                 <button onclick="switchChoTab('alimenti')" id="btn-cho-alimenti" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🍞 Alimenti</button>
                 <button onclick="switchChoTab('legumi')" id="btn-cho-legumi" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🫘 Legumi</button>
@@ -63,18 +63,19 @@
                 <button onclick="switchChoTab('frutta')" id="btn-cho-frutta" class="flex-1 py-1 px-1.5 rounded text-slate-400 whitespace-nowrap">🍎 Frutta</button>
             </div>
 
-            <!-- INPUT E TABELLA CATEGORIA ATTIVA -->
-            <div class="grid grid-cols-5 gap-2 mb-2">
+            <!-- INPUT CIBI -->
+            <div class="grid grid-cols-5 gap-2 mb-2 flex-shrink-0">
                 <input id="cho-food" type="text" placeholder="Nome cibo..." class="col-span-3 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
                 <input id="cho-val" type="number" placeholder="CHO /100g" class="col-span-2 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
             </div>
-            <button onclick="addCarbItem()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-1.5 rounded text-xs mb-3">
+            <button onclick="addCarbItem()" class="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-1.5 rounded text-xs mb-3 flex-shrink-0">
                 + Aggiungi Cibo
             </button>
 
-            <div class="max-h-40 overflow-y-auto pr-1 mb-4 border-b border-slate-800/80 pb-3">
+            <!-- TABELLA CIBI (Si espande nello spazio verticale) -->
+            <div class="flex-grow overflow-y-auto pr-1 mb-3 border-b border-slate-800/80">
                 <table class="w-full text-left text-xs">
-                    <thead class="bg-slate-950 text-slate-400 border-b border-slate-800 sticky top-0">
+                    <thead class="bg-slate-950 text-slate-400 border-b border-slate-800 sticky top-0 z-10">
                         <tr>
                             <th class="p-2">Alimento</th>
                             <th class="p-2 text-right">g CHO / 100g</th>
@@ -85,14 +86,14 @@
                 </table>
             </div>
 
-            <!-- SEZIONE CALCOLATORE PASTO -->
-            <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5">
+            <!-- SEZIONE CALCOLATORE PASTO (In basso) -->
+            <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex-shrink-0">
                 <h4 class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5">
                     🧮 Calcolatore Calcolo Rapido Pasto
                 </h4>
-                <textarea id="meal-input" oninput="calculateMeal()" placeholder="Es: 120g di pasta, 35g di pane e 20g di crostata..." class="w-full h-16 bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none mb-2"></textarea>
+                <textarea id="meal-input" oninput="calculateMeal()" placeholder="Es: 120g di pasta, 35g di pane e 20g di crostata..." class="w-full h-14 bg-slate-900 border border-slate-800 rounded p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none mb-2"></textarea>
                 
-                <div id="meal-breakdown" class="space-y-1 mb-2 max-h-28 overflow-y-auto pr-1 text-[11px]"></div>
+                <div id="meal-breakdown" class="space-y-1 mb-2 max-h-24 overflow-y-auto pr-1 text-[11px]"></div>
 
                 <div class="flex justify-between items-center border-t border-slate-800 pt-2 mt-1">
                     <span class="text-xs font-bold text-slate-400 uppercase">Totale Carboidrati:</span>
@@ -280,7 +281,11 @@
             const valEl = document.getElementById('cho-val');
             if (!foodEl.value.trim() || !valEl.value) return;
 
-            choCategories[activeChoCategory].unshift({ food: foodEl.value.trim(), val: parseFloat(valEl.value) });
+            choCategories[activeChoCategory].push({ food: foodEl.value.trim(), val: parseFloat(valEl.value) });
+            
+            // Ordina dal più alto al più basso per carboidrati
+            choCategories[activeChoCategory].sort((a, b) => b.val - a.val);
+
             localStorage.setItem(`dig_cho_${activeChoCategory}`, JSON.stringify(choCategories[activeChoCategory]));
             foodEl.value = ''; valEl.value = '';
             renderCHO();
@@ -297,6 +302,12 @@
         function renderCHO() {
             const tbody = document.getElementById('cho-table-body');
             tbody.innerHTML = '';
+            
+            // Assicura l'ordinamento decrescente prima di visualizzare
+            if (choCategories[activeChoCategory]) {
+                choCategories[activeChoCategory].sort((a, b) => b.val - a.val);
+            }
+
             const currentList = choCategories[activeChoCategory] || [];
 
             if(currentList.length === 0) {
