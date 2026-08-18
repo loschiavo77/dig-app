@@ -54,14 +54,9 @@
                 <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400">
                     🥗 Tabella & Categorie Carboidrati
                 </h3>
-                <div class="flex gap-1">
-                    <button onclick="copyAllCarbs()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-1.5 py-0.5 rounded text-[10px] border border-emerald-900/40">
-                        📋 Copia Cibi
-                    </button>
-                    <button onclick="pasteCarbs()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-1.5 py-0.5 rounded text-[10px] border border-slate-700">
-                        📥 Incolla Cibi
-                    </button>
-                </div>
+                <button onclick="copyAllCarbs()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-2 py-0.5 rounded text-[10px] border border-emerald-900/40">
+                    📋 Copia Cibi
+                </button>
             </div>
 
             <!-- SUBTAB CARBOIDRATI -->
@@ -179,14 +174,9 @@
                 <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400">
                     📚 Appunti & Studio Diabetologia
                 </h3>
-                <div class="flex gap-1">
-                    <button onclick="copyActiveNote()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-1.5 py-0.5 rounded text-[10px] border border-emerald-900/40">
-                        📋 Copia Note
-                    </button>
-                    <button onclick="pasteActiveNote()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold px-1.5 py-0.5 rounded text-[10px] border border-slate-700">
-                        📥 Incolla Note
-                    </button>
-                </div>
+                <button onclick="copyActiveNote()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-2 py-0.5 rounded text-[10px] border border-emerald-900/40">
+                    📋 Copia Note
+                </button>
             </div>
 
             <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-2 text-[10px] font-bold flex-shrink-0">
@@ -344,7 +334,7 @@
             });
         }
 
-        // COPIA LISTA CIBI
+        // COPIA TABELLA CIBI NEGLI APPUNTI
         function copyAllCarbs() {
             let text = "--- LISTA CIBI & CARBOIDRATI ---\n\n";
             Object.keys(choCategories).forEach(cat => {
@@ -364,61 +354,6 @@
             }
 
             copyToClipboard(text, "Lista cibi copiata negli appunti!");
-        }
-
-        // INCOLLA LISTA CIBI
-        async function pasteCarbs() {
-            let pastedText = "";
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                try {
-                    pastedText = await navigator.clipboard.readText();
-                } catch(e) {}
-            }
-            if (!pastedText) {
-                pastedText = prompt("Incolla qui il testo dei cibi e premi OK:");
-            }
-
-            if (!pastedText || !pastedText.trim()) return;
-
-            let currentCategory = activeChoCategory;
-            let addedCount = 0;
-
-            const lines = pastedText.split('\n');
-            lines.forEach(line => {
-                line = line.trim();
-                if (!line) return;
-
-                if (line.startsWith('[') && line.endsWith(']')) {
-                    const catName = line.substring(1, line.length - 1).toLowerCase();
-                    if (choCategories[catName]) currentCategory = catName;
-                    return;
-                }
-
-                const match = line.match(/^[•\-\*]?\s*(.+?):\s*(\d+(?:[\.,]\d+)?)\s*g/i);
-                if (match) {
-                    const foodName = match[1].trim();
-                    const choVal = parseFloat(match[2].replace(',', '.'));
-
-                    if (foodName && !isNaN(choVal)) {
-                        const exists = choCategories[currentCategory].some(item => item.food.toLowerCase() === foodName.toLowerCase());
-                        if (!exists) {
-                            choCategories[currentCategory].push({ food: foodName, val: choVal });
-                            addedCount++;
-                        }
-                    }
-                }
-            });
-
-            if (addedCount > 0) {
-                Object.keys(choCategories).forEach(cat => {
-                    localStorage.setItem(`dig_cho_${cat}`, JSON.stringify(choCategories[cat]));
-                });
-                renderCHO();
-                calculateMeal();
-                alert(`Importati con successo ${addedCount} cibi!`);
-            } else {
-                alert("Nessun cibo valido trovato nel testo incollato.");
-            }
         }
 
         // CALCOLATORE RAPIDO PASTO
@@ -520,38 +455,6 @@
                     text += `• ${item.term} = ${item.trans}\n`;
                 });
                 copyToClipboard(text, "Glossario copiato negli appunti!");
-            }
-        }
-
-        // INCOLLA APPUNTI NELLA SCHEDA CORRENTE
-        async function pasteActiveNote() {
-            let textToPaste = "";
-
-            if (navigator.clipboard && navigator.clipboard.readText) {
-                try {
-                    textToPaste = await navigator.clipboard.readText();
-                } catch(e) {}
-            }
-
-            if (!textToPaste) {
-                textToPaste = prompt("Incolla qui il tuo testo e premi OK:");
-            }
-
-            if (!textToPaste || !textToPaste.trim()) return;
-
-            if (currentActiveSubTab === 'medica' || currentActiveSubTab === 'tecnologica') {
-                const targetArea = document.getElementById(`notes-${currentActiveSubTab}`);
-                if (targetArea) {
-                    if (targetArea.value.trim().length > 0) {
-                        targetArea.value += "\n\n" + textToPaste.trim();
-                    } else {
-                        targetArea.value = textToPaste.trim();
-                    }
-                    saveNotes(currentActiveSubTab);
-                    alert("Testo incollato con successo!");
-                }
-            } else {
-                alert("Per aggiungere parole al Glossario usa la barra di inserimento in alto.");
             }
         }
 
