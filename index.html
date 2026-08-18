@@ -72,7 +72,7 @@
                 + Aggiungi Cibo
             </button>
 
-            <!-- TABELLA CIBI (Si espande nello spazio verticale) -->
+            <!-- TABELLA CIBI -->
             <div class="flex-grow overflow-y-auto pr-1 mb-3 border-b border-slate-800/80">
                 <table class="w-full text-left text-xs">
                     <thead class="bg-slate-950 text-slate-400 border-b border-slate-800 sticky top-0 z-10">
@@ -86,7 +86,7 @@
                 </table>
             </div>
 
-            <!-- SEZIONE CALCOLATORE PASTO (In basso) -->
+            <!-- SEZIONE CALCOLATORE PASTO -->
             <div class="bg-slate-950 border border-slate-800 rounded-lg p-2.5 flex-shrink-0">
                 <h4 class="text-[11px] font-bold text-emerald-400 uppercase tracking-wider mb-1.5">
                     🧮 Calcolatore Calcolo Rapido Pasto
@@ -162,40 +162,54 @@
         </div>
     </div>
 
-    <!-- TAB DESTRA: APPUNTI STUDIO DIABETOLOGIA -->
+    <!-- TAB DESTRA: APPUNTI STUDIO DIABETOLOGIA & BACKUP -->
     <div id="tab-notes" class="tab-content justify-between">
-        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[75vh]">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2">
+        <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[78vh]">
+            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2 flex-shrink-0">
                 📚 Appunti & Studio Diabetologia
             </h3>
 
-            <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-3 text-[10px] font-bold">
+            <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-2 text-[10px] font-bold flex-shrink-0">
                 <button onclick="switchSubTab('medica')" id="btn-sub-medica" class="flex-1 py-1 rounded text-emerald-400 bg-slate-800">Medica</button>
                 <button onclick="switchSubTab('tecnologica')" id="btn-sub-tecnologica" class="flex-1 py-1 rounded text-slate-400">Tecnologia</button>
                 <button onclick="switchSubTab('glossario')" id="btn-sub-glossario" class="flex-1 py-1 rounded text-slate-400">Glossario EN/IT</button>
             </div>
 
             <!-- SUBTAB MEDICA -->
-            <div id="subtab-medica" class="subtab-content active">
+            <div id="subtab-medica" class="subtab-content active flex-grow mb-2">
                 <textarea id="notes-medica" placeholder="Scrivi qui i tuoi appunti medici..." class="w-full h-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('medica')"></textarea>
             </div>
 
             <!-- SUBTAB TECNOLOGICA -->
-            <div id="subtab-tecnologica" class="subtab-content">
+            <div id="subtab-tecnologica" class="subtab-content flex-grow mb-2">
                 <textarea id="notes-tecnologica" placeholder="Scrivi qui i tuoi appunti tecnologici..." class="w-full h-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 resize-none" oninput="saveNotes('tecnologica')"></textarea>
             </div>
 
             <!-- SUBTAB GLOSSARIO -->
-            <div id="subtab-glossario" class="subtab-content">
-                <div class="flex gap-2 mb-2">
+            <div id="subtab-glossario" class="subtab-content flex-grow mb-2">
+                <div class="flex gap-2 mb-2 flex-shrink-0">
                     <input id="gloss-term" type="text" placeholder="Inserisci parola (IT o EN)" class="flex-1 bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
                     <button onclick="addGlossaryTermAuto()" id="btn-translate" class="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold px-3 py-1.5 rounded text-xs">
                         + Traduci
                     </button>
                 </div>
 
-                <div class="flex-grow overflow-y-auto border border-slate-800/80 rounded bg-slate-950/40 p-2 mt-1">
+                <div class="flex-grow overflow-y-auto border border-slate-800/80 rounded bg-slate-950/40 p-2">
                     <div id="glossary-list" class="space-y-1.5"></div>
+                </div>
+            </div>
+
+            <!-- SEZIONE BACKUP / RIPRISTINO DATI -->
+            <div class="bg-slate-950 border border-slate-800 rounded-lg p-2 flex-shrink-0 mt-auto">
+                <span class="text-[10px] font-bold text-slate-400 uppercase block mb-1">💾 Backup & Cambio Telefono</span>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="exportData()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold py-1 px-2 rounded text-[11px] border border-emerald-900/40">
+                        📥 Esporta Dati
+                    </button>
+                    <label class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-1 px-2 rounded text-[11px] border border-slate-700 text-center cursor-pointer block">
+                        📤 Importa Dati
+                        <input type="file" id="import-file" onchange="importData(event)" class="hidden" accept=".json">
+                    </label>
                 </div>
             </div>
         </div>
@@ -303,7 +317,6 @@
             const tbody = document.getElementById('cho-table-body');
             tbody.innerHTML = '';
             
-            // Assicura l'ordinamento decrescente prima di visualizzare
             if (choCategories[activeChoCategory]) {
                 choCategories[activeChoCategory].sort((a, b) => b.val - a.val);
             }
@@ -468,6 +481,47 @@
                     </div>
                 `;
             });
+        }
+
+        // ESPORTAZIONE E IMPORTAZIONE DATI PER CAMBIO TELEFONO
+        function exportData() {
+            const backupData = {};
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key.startsWith('dig_')) {
+                    backupData[key] = localStorage.getItem(key);
+                }
+            }
+            
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `DIG_Backup_${new Date().toISOString().slice(0,10)}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importData(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    Object.keys(importedData).forEach(key => {
+                        if (key.startsWith('dig_')) {
+                            localStorage.setItem(key, importedData[key]);
+                        }
+                    });
+                    alert("Dati importati con successo!");
+                    location.reload();
+                } catch (err) {
+                    alert("Errore nell'importazione del file. Assicurati che sia un file JSON valido.");
+                }
+            };
+            reader.readAsText(file);
         }
 
         // PARSER IOB CORRETTO
