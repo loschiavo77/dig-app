@@ -50,9 +50,14 @@
     <!-- TAB SINISTRA: DIARIO CARBOIDRATI -->
     <div id="tab-cho" class="tab-content justify-between">
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[78vh]">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2 flex-shrink-0">
-                🥗 Tabella & Categorie Carboidrati
-            </h3>
+            <div class="flex justify-between items-center border-b border-slate-800 pb-2 mb-2 flex-shrink-0">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    🥗 Tabella & Categorie Carboidrati
+                </h3>
+                <button onclick="copyAllCarbs()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-2 py-0.5 rounded text-[10px] border border-emerald-900/40">
+                    📋 Copia Cibi
+                </button>
+            </div>
 
             <!-- SUBTAB CARBOIDRATI -->
             <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-3 text-[9px] font-bold gap-1 overflow-x-auto flex-shrink-0">
@@ -162,12 +167,17 @@
         </div>
     </div>
 
-    <!-- TAB DESTRA: APPUNTI STUDIO DIABETOLOGIA & BACKUP -->
+    <!-- TAB DESTRA: APPUNTI STUDIO DIABETOLOGIA -->
     <div id="tab-notes" class="tab-content justify-between">
         <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-3 flex flex-col h-[78vh]">
-            <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-2 border-b border-slate-800 pb-2 flex-shrink-0">
-                📚 Appunti & Studio Diabetologia
-            </h3>
+            <div class="flex justify-between items-center border-b border-slate-800 pb-2 mb-2 flex-shrink-0">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                    📚 Appunti & Studio Diabetologia
+                </h3>
+                <button onclick="copyActiveNote()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold px-2 py-0.5 rounded text-[10px] border border-emerald-900/40">
+                    📋 Copia Note
+                </button>
+            </div>
 
             <div class="flex bg-slate-950 rounded-lg p-1 border border-slate-800 mb-2 text-[10px] font-bold flex-shrink-0">
                 <button onclick="switchSubTab('medica')" id="btn-sub-medica" class="flex-1 py-1 rounded text-emerald-400 bg-slate-800">Medica</button>
@@ -198,20 +208,6 @@
                     <div id="glossary-list" class="space-y-1.5"></div>
                 </div>
             </div>
-
-            <!-- SEZIONE BACKUP / RIPRISTINO DATI -->
-            <div class="bg-slate-950 border border-slate-800 rounded-lg p-2 flex-shrink-0 mt-auto">
-                <span class="text-[10px] font-bold text-slate-400 uppercase block mb-1">💾 Backup & Cambio Telefono</span>
-                <div class="grid grid-cols-2 gap-2">
-                    <button onclick="exportData()" class="bg-slate-800 hover:bg-slate-700 text-emerald-400 font-bold py-1 px-2 rounded text-[11px] border border-emerald-900/40">
-                        📥 Esporta Dati
-                    </button>
-                    <label class="bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-1 px-2 rounded text-[11px] border border-slate-700 text-center cursor-pointer block">
-                        📤 Importa Dati
-                        <input type="file" id="import-file" onchange="importData(event)" class="hidden" accept=".json">
-                    </label>
-                </div>
-            </div>
         </div>
     </div>
 
@@ -233,6 +229,8 @@
         let chartInstance = null;
         let hasUserScrolled = false;
         let isFetching = false;
+
+        let currentActiveSubTab = 'medica';
 
         let activeChoCategory = 'sushi';
         let choCategories = {
@@ -296,8 +294,6 @@
             if (!foodEl.value.trim() || !valEl.value) return;
 
             choCategories[activeChoCategory].push({ food: foodEl.value.trim(), val: parseFloat(valEl.value) });
-            
-            // Ordina dal più alto al più basso per carboidrati
             choCategories[activeChoCategory].sort((a, b) => b.val - a.val);
 
             localStorage.setItem(`dig_cho_${activeChoCategory}`, JSON.stringify(choCategories[activeChoCategory]));
@@ -336,6 +332,28 @@
                     </tr>
                 `;
             });
+        }
+
+        // COPIA TABELLA CIBI NEGLI APPUNTI
+        function copyAllCarbs() {
+            let text = "--- LISTA CIBI & CARBOIDRATI ---\n\n";
+            Object.keys(choCategories).forEach(cat => {
+                const list = choCategories[cat];
+                if (list.length > 0) {
+                    text += `[${cat.toUpperCase()}]\n`;
+                    list.forEach(item => {
+                        text += `• ${item.food}: ${item.val}g CHO / 100g\n`;
+                    });
+                    text += "\n";
+                }
+            });
+
+            if (text.trim() === "--- LISTA CIBI & CARBOIDRATI ---") {
+                alert("Nessun cibo salvato da copiare.");
+                return;
+            }
+
+            copyToClipboard(text, "Lista cibi copiata negli appunti!");
         }
 
         // CALCOLATORE RAPIDO PASTO
@@ -390,6 +408,7 @@
 
         // GESTIONE SCHEDE APPUNTI
         function switchSubTab(subTabName) {
+            currentActiveSubTab = subTabName;
             document.querySelectorAll('.subtab-content').forEach(el => {
                 el.classList.remove('active');
                 el.style.display = 'none';
@@ -421,6 +440,34 @@
 
             if (medEl) medEl.value = localStorage.getItem('dig_notes_medica') || '';
             if (tecEl) tecEl.value = localStorage.getItem('dig_notes_tecnologica') || '';
+        }
+
+        // COPIA APPUNTI DELLA SCHEDA CORRENTE
+        function copyActiveNote() {
+            if (currentActiveSubTab === 'medica' || currentActiveSubTab === 'tecnologica') {
+                const noteVal = document.getElementById(`notes-${currentActiveSubTab}`).value.trim();
+                if (!noteVal) { alert("Nessun appunto da copiare in questa sezione."); return; }
+                copyToClipboard(noteVal, `Appunti [${currentActiveSubTab.toUpperCase()}] copiati!`);
+            } else if (currentActiveSubTab === 'glossario') {
+                if (glossaryList.length === 0) { alert("Nessun termine nel glossario da copiare."); return; }
+                let text = "--- GLOSSARIO EN/IT ---\n\n";
+                glossaryList.forEach(item => {
+                    text += `• ${item.term} = ${item.trans}\n`;
+                });
+                copyToClipboard(text, "Glossario copiato negli appunti!");
+            }
+        }
+
+        function copyToClipboard(text, successMsg) {
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(text).then(() => {
+                    alert(successMsg);
+                }).catch(() => {
+                    prompt("Copia manualmente questo testo:", text);
+                });
+            } else {
+                prompt("Copia manualmente questo testo:", text);
+            }
         }
 
         // TRADUZIONE AUTOMATICA GLOSSARIO
@@ -481,47 +528,6 @@
                     </div>
                 `;
             });
-        }
-
-        // ESPORTAZIONE E IMPORTAZIONE DATI PER CAMBIO TELEFONO
-        function exportData() {
-            const backupData = {};
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key.startsWith('dig_')) {
-                    backupData[key] = localStorage.getItem(key);
-                }
-            }
-            
-            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(backupData));
-            const downloadAnchor = document.createElement('a');
-            downloadAnchor.setAttribute("href", dataStr);
-            downloadAnchor.setAttribute("download", `DIG_Backup_${new Date().toISOString().slice(0,10)}.json`);
-            document.body.appendChild(downloadAnchor);
-            downloadAnchor.click();
-            downloadAnchor.remove();
-        }
-
-        function importData(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-
-            const reader = new FileReader();
-            reader.onload = function(e) {
-                try {
-                    const importedData = JSON.parse(e.target.result);
-                    Object.keys(importedData).forEach(key => {
-                        if (key.startsWith('dig_')) {
-                            localStorage.setItem(key, importedData[key]);
-                        }
-                    });
-                    alert("Dati importati con successo!");
-                    location.reload();
-                } catch (err) {
-                    alert("Errore nell'importazione del file. Assicurati che sia un file JSON valido.");
-                }
-            };
-            reader.readAsText(file);
         }
 
         // PARSER IOB CORRETTO
